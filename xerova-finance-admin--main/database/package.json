@@ -1,0 +1,21 @@
+{
+  "name": "@xerova/database",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "seed": "tsx src/seed/seeder.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "mongodb-memory-server": "^10.0.0",
+    "mongoose": "^8.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

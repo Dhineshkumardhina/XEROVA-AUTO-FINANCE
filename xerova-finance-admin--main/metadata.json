@@ -1,0 +1,6 @@
+{
+  "name": "Xerova Auto Finance",
+  "description": "Xerova Auto Finance Enterprise Automobile ERP for credit underwriting, HP ledger books, multi-parameter search, cashier EMI collection receipts, pre-owned vehicle consultancy, and repossessed yard bidding.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
