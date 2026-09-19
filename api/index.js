@@ -76392,14 +76392,8 @@ async function ensureDB() {
 }
 async function handler(req, res) {
   await ensureDB();
-  if (req.query && req.query.__path) {
-    const p = Array.isArray(req.query.__path) ? req.query.__path.join("/") : req.query.__path;
-    req.url = "/api/" + p.replace(/^\//, "");
-  } else if (req.headers && req.headers["x-matched-path"]) {
+  if (req.headers && req.headers["x-matched-path"]) {
     req.url = req.headers["x-matched-path"];
-  }
-  if (req.url && req.url.includes("?__path=")) {
-    req.url = req.url.split("?__path=")[0];
   }
   return app_default(req, res);
 }
@@ -76748,3 +76742,4 @@ safe-buffer/index.js:
    * g3-prettier-ignore-file
    *)
 */
+const _h = module.exports.default || module.exports; module.exports = _h; module.exports.default = _h;
