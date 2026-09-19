@@ -76392,12 +76392,14 @@ async function ensureDB() {
 }
 async function handler(req, res) {
   await ensureDB();
-  const matchedPath = req.headers["x-matched-path"] || req.headers["x-now-route-matches"];
-  if (matchedPath && typeof matchedPath === "string" && matchedPath.startsWith("/api")) {
-    req.url = matchedPath;
-  } else if (req.query && req.query.path) {
-    const p = Array.isArray(req.query.path) ? req.query.path.join("/") : req.query.path;
-    req.url = "/api/" + p;
+  if (req.query && req.query.__path) {
+    const p = Array.isArray(req.query.__path) ? req.query.__path.join("/") : req.query.__path;
+    req.url = "/api/" + p.replace(/^\//, "");
+  } else if (req.headers && req.headers["x-matched-path"]) {
+    req.url = req.headers["x-matched-path"];
+  }
+  if (req.url && req.url.includes("?__path=")) {
+    req.url = req.url.split("?__path=")[0];
   }
   return app_default(req, res);
 }

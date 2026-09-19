@@ -16,13 +16,17 @@ export default async function handler(req: any, res: any) {
   // Ensure DB connection
   await ensureDB();
 
-  // Restore true requested path if rewritten by Vercel
-  const matchedPath = req.headers["x-matched-path"] || req.headers["x-now-route-matches"];
-  if (matchedPath && typeof matchedPath === "string" && matchedPath.startsWith("/api")) {
-    req.url = matchedPath;
-  } else if (req.query && req.query.path) {
-    const p = Array.isArray(req.query.path) ? req.query.path.join("/") : req.query.path;
-    req.url = "/api/" + p;
+  // Reconstruct exact API URL from Vercel rewrite parameter or headers
+  if (req.query && req.query.__path) {
+    const p = Array.isArray(req.query.__path) ? req.query.__path.join("/") : req.query.__path;
+    req.url = "/api/" + p.replace(/^\//, "");
+  } else if (req.headers && req.headers["x-matched-path"]) {
+    req.url = req.headers["x-matched-path"];
+  }
+
+  // Remove query param artifact from URL if present
+  if (req.url && req.url.includes("?__path=")) {
+    req.url = req.url.split("?__path=")[0];
   }
 
   return (app as any)(req, res);
