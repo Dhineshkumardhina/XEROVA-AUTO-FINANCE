@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import path from "node:path";
+import fs from "node:fs";
 import { connectDB, UserModel, MasterModel, SettingModel, AuditLogModel } from "@xerova/database";
 
 // Routes
@@ -371,6 +373,22 @@ app.get("/health", (req, res) => {
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", timestamp: new Date().toISOString(), service: "XEROVA Auto Finance API Server" });
 });
+
+// Serve frontend static assets in unified production mode if available
+const frontendDist = path.resolve(process.cwd(), "frontend/dist");
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.url.startsWith("/api") || req.url === "/health") {
+      return next();
+    }
+    const indexPath = path.join(frontendDist, "index.html");
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    }
+    next();
+  });
+}
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
