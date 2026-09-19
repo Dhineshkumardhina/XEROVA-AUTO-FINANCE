@@ -89,5 +89,26 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await ConsultancyModel.findOneAndDelete({ $or: [{ id }, { serialNo: id }] });
+    if (!deleted) return res.status(404).json({ error: "Consultancy record not found" });
+
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: new Date().toISOString(),
+      user: "Consultancy Desk",
+      action: "PRELOAN_STATUS_UPDATE",
+      details: `Vehicle Stock Record Removed: ${deleted.vehicleName} (${deleted.vehicleNo})`
+    });
+
+    res.json({ message: "Record deleted", deleted });
+  } catch (err) {
+    console.error("[Consultancy] Error deleting record:", err);
+    res.status(500).json({ error: "Error deleting consultancy record" });
+  }
+});
+
 export default router;
 

@@ -38,11 +38,26 @@ export default function ConsultancyView({ initialTab = "purchase", onTabChange }
   const [activeTab, setActiveTab] = useState<"purchase" | "sales" | "view_sales" | "pending">(initialTab);
   const [records, setRecords] = useState<any[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
+  const [selectedPrintRecord, setSelectedPrintRecord] = useState<any | null>(null);
   
   // Modals / Dropdowns / Popover States
   const [isBuyoutOpen, setIsBuyoutOpen] = useState(false);
   const [buyoutRecord, setBuyoutRecord] = useState<any | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const handleDeleteRecord = async (id: string, vehicleNo: string) => {
+    if (!window.confirm(`Delete vehicle record ${vehicleNo} (${id}) from consultancy stock?`)) return;
+    try {
+      const res = await fetch(`/api/consultancies/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        showToast(`Stock record ${vehicleNo} removed successfully.`);
+        if (selectedRecord?.id === id) setSelectedRecord(null);
+        fetchRecords();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Purchase / Procurement Entry Form State
   const [procurementForm, setProcurementForm] = useState({
@@ -192,6 +207,7 @@ export default function ConsultancyView({ initialTab = "purchase", onTabChange }
     try {
       const serialNo = `SALE-${Date.now().toString().slice(-4)}`;
       const payload = {
+        id: serialNo,
         type: "SALE",
         serialNo,
         date: new Date().toISOString().split("T")[0],
@@ -1234,20 +1250,26 @@ export default function ConsultancyView({ initialTab = "purchase", onTabChange }
                   </div>
                 </div>
 
-                <div className="flex justify-between pt-2.5 border-t border-slate-200 font-sans text-[11px]">
-                  <button 
-                    onClick={() => {
-                      alert(`Preparing Print Template: Xerova Brokerage Certificate for vehicle ${selectedRecord.vehicleNo}`);
-                    }}
-                    className="text-slate-500 hover:text-slate-800 flex items-center gap-1 font-bold"
-                  >
-                    <Printer className="h-3.5 w-3.5 text-slate-400" /> Print Certificate
-                  </button>
+                <div className="flex justify-between items-center pt-2.5 border-t border-slate-200 font-sans text-[11px]">
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => setSelectedPrintRecord(selectedRecord)}
+                      className="text-slate-600 hover:text-slate-900 flex items-center gap-1 font-bold cursor-pointer"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-slate-500" /> Print Certificate
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteRecord(selectedRecord.id, selectedRecord.vehicleNo)}
+                      className="text-rose-600 hover:text-rose-700 flex items-center gap-1 font-bold cursor-pointer"
+                    >
+                      <Trash className="h-3.5 w-3.5 text-rose-500" /> Remove
+                    </button>
+                  </div>
                   <button 
                     onClick={() => {
                       alert(`WhatsApp dispatch simulation: Dispatched document checklist and current status of plate ${selectedRecord.vehicleNo} to ${selectedRecord.phone}`);
                     }}
-                    className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 font-bold"
+                    className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 font-bold cursor-pointer"
                   >
                     <Share2 className="h-3.5 w-3.5 text-emerald-500" /> WhatsApp Update
                   </button>
@@ -1263,6 +1285,101 @@ export default function ConsultancyView({ initialTab = "purchase", onTabChange }
           </div>
         </div>
       )}
+
+      {/* Printable Vehicle Valuation & Brokerage Certificate Modal */}
+      {selectedPrintRecord && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans animate-fade-in">
+          <div className="bg-white rounded-xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden">
+            <div className="bg-slate-900 text-white px-5 py-3 flex justify-between items-center select-none">
+              <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <Car className="h-4 w-4 text-amber-400" /> Valuation & Sourcing Certificate
+              </span>
+              <button onClick={() => setSelectedPrintRecord(null)} className="p-1 text-slate-400 hover:text-white rounded">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 printable-print-block">
+              <div className="border-4 border-double border-indigo-900/20 p-5 rounded-lg space-y-4 bg-slate-50/50">
+                <div className="text-center border-b border-dashed border-slate-300 pb-3">
+                  <h2 className="text-base font-black text-indigo-950 uppercase tracking-tight">XEROVA AUTO CONSULTANCY</h2>
+                  <p className="text-[10px] text-slate-500 font-medium">Pre-Owned Automobile Valuation & Title Registry Desk</p>
+                  <p className="text-[10px] font-mono font-bold text-indigo-800 mt-1 uppercase">VEHICLE APPRAISAL & SOURCING CERTIFICATE</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">Registry Stock ID</span>
+                    <span className="font-mono font-black text-slate-900">{selectedPrintRecord.serialNo || selectedPrintRecord.id}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">Registration Plate</span>
+                    <span className="font-mono font-black text-indigo-900 uppercase text-sm">{selectedPrintRecord.vehicleNo}</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-3 rounded border border-slate-200 space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Vehicle Description:</span>
+                    <strong className="text-slate-900">{selectedPrintRecord.vehicleName}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Model / Make Year:</span>
+                    <strong className="text-slate-900">{selectedPrintRecord.makeYear || selectedPrintRecord.model}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Category Type:</span>
+                    <span className="font-mono font-bold text-slate-800">{selectedPrintRecord.type}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-dashed border-slate-200 pt-1.5">
+                    <span className="text-slate-500">Appraised Valuation:</span>
+                    <span className="font-mono font-black text-slate-950 text-sm">₹{Number(selectedPrintRecord.vehicleValue || 0).toLocaleString()}</span>
+                  </div>
+                  {selectedPrintRecord.status === "SOLD" && (
+                    <div className="flex justify-between text-emerald-800 border-t border-dashed border-slate-200 pt-1.5 font-bold">
+                      <span>Purchased By:</span>
+                      <span>{selectedPrintRecord.buyerName} (₹{Number(selectedPrintRecord.soldPrice || 0).toLocaleString()})</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-slate-500">
+                    <span>Contact / Owner:</span>
+                    <span>{selectedPrintRecord.name} ({selectedPrintRecord.phone})</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 pt-4 text-center text-[10px] text-slate-500 border-t border-dashed border-slate-300">
+                  <div>
+                    <div className="h-6"></div>
+                    <p className="border-t border-slate-400 pt-1 font-bold text-slate-700">Appraiser Signature</p>
+                  </div>
+                  <div>
+                    <div className="h-6 flex items-center justify-center">
+                      <span className="text-[8px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded font-mono">SEAL & VERIFIED</span>
+                    </div>
+                    <p className="border-t border-slate-400 pt-1 font-bold text-slate-700">Consultancy Branch Manager</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button 
+                  onClick={() => setSelectedPrintRecord(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-1.5 rounded font-bold text-xs uppercase"
+                >
+                  Dismiss
+                </button>
+                <button 
+                  onClick={() => window.print()}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded font-bold text-xs flex items-center gap-1.5 uppercase shadow-sm cursor-pointer"
+                >
+                  <Printer className="h-3.5 w-3.5" /> Print Appraisal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -19,17 +19,74 @@ router.get("/deposits", async (req, res) => {
     res.json(list);
   } catch (err) { res.status(500).json({ error: "Error fetching deposits" }); }
 });
+
 router.post("/deposits", async (req, res) => {
   try {
     const body = req.body;
+    const amount = Number(body.amount || 0);
+    const interestRate = Number(body.interestRate || body.interestRatePct || 8.5);
+    const durationMonths = Number(body.durationMonths || body.termMonths || 12);
+    const maturityAmount = body.maturityAmount ? Number(body.maturityAmount) : Math.round(amount + (amount * (interestRate / 100) * (durationMonths / 12)));
+    const maturityDate = body.maturityDate || new Date(Date.now() + durationMonths * 30.44 * 24 * 3600 * 1000).toISOString().split("T")[0];
+    const id = body.id || `DEP-${Date.now().toString().slice(-5)}`;
+
     const item = await DepositModel.create({
       ...body,
-      id: body.id || `DEP-${Date.now().toString().slice(-5)}`,
-      startDate: body.startDate || new Date().toISOString().split("T")[0],
+      id,
+      depositorName: body.depositorName || "Depositor",
+      phone: body.phone || "N/A",
+      amount,
+      interestRate,
+      interestRatePct: interestRate,
+      durationMonths,
+      termMonths: durationMonths,
+      maturityAmount,
+      maturityDate,
+      startDate: body.startDate || body.date || new Date().toISOString().split("T")[0],
+      date: body.date || body.startDate || new Date().toISOString().split("T")[0],
       status: "ACTIVE"
     });
+
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: new Date().toISOString(),
+      user: item.depositorName,
+      action: "DEPOSIT_BOOKED",
+      details: `Fixed Deposit Booked: ${item.id} - ₹${amount.toLocaleString()} by ${item.depositorName} @ ${interestRate}% for ${durationMonths}M. Guaranteed Maturity: ₹${maturityAmount.toLocaleString()}`
+    });
+
     res.status(201).json(item);
-  } catch (err) { res.status(500).json({ error: "Error creating deposit" }); }
+  } catch (err) { 
+    console.error("[Deposit] Error creating deposit:", err);
+    res.status(500).json({ error: "Error creating deposit" }); 
+  }
+});
+
+router.post("/deposits/:id/close", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const dep = await DepositModel.findOne({ id });
+    if (!dep) return res.status(404).json({ error: "Deposit not found" });
+
+    dep.status = "WITHDRAWN";
+    dep.closedDate = new Date().toISOString().split("T")[0];
+    dep.closedPayout = Number(req.body.closedPayout || dep.maturityAmount || dep.amount);
+    dep.closureRemarks = req.body.remarks || "Regular maturity liquidation";
+    await dep.save();
+
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: new Date().toISOString(),
+      user: "Finance Desk",
+      action: "DEPOSIT_CLOSED",
+      details: `Fixed Deposit Liquidated: ${dep.id} (${dep.depositorName}) - Settlement Payout: ₹${dep.closedPayout.toLocaleString()}`
+    });
+
+    res.json(dep);
+  } catch (err) {
+    console.error("[Deposit] Error closing deposit:", err);
+    res.status(500).json({ error: "Error liquidating deposit" });
+  }
 });
 
 // 2. Vouchers
@@ -39,6 +96,7 @@ router.get("/vouchers", async (req, res) => {
     res.json(list);
   } catch (err) { res.status(500).json({ error: "Error fetching vouchers" }); }
 });
+
 router.post("/vouchers", async (req, res) => {
   try {
     const body = req.body;
@@ -47,6 +105,15 @@ router.post("/vouchers", async (req, res) => {
       id: body.id || `VOU-${Date.now().toString().slice(-6)}`,
       date: body.date || new Date().toISOString().split("T")[0]
     });
+
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: new Date().toISOString(),
+      user: "Accounts Desk",
+      action: "VOUCHER_POSTED",
+      details: `Journal Voucher Posted: ${item.type || "PAYMENT"} ₹${Number(item.amount || 0).toLocaleString()} - ${item.narration || item.category || "Auxiliary General Ledger"}`
+    });
+
     res.status(201).json(item);
   } catch (err) { res.status(500).json({ error: "Error posting voucher" }); }
 });
@@ -58,32 +125,83 @@ router.get("/handloans", async (req, res) => {
     res.json(list);
   } catch (err) { res.status(500).json({ error: "Error fetching hand loans" }); }
 });
+
 router.post("/handloans", async (req, res) => {
   try {
     const body = req.body;
+    const customerName = body.customerName || body.borrowerName || "Borrower";
+    const amount = Number(body.amount || 0);
+    const loanNo = body.loanNo || `HL-${Date.now().toString().slice(-5)}`;
+    const id = body.id || loanNo;
+
     const item = await HandLoanModel.create({
       ...body,
-      id: body.id || `HL-${Date.now().toString().slice(-5)}`,
+      id,
+      loanNo,
+      customerName,
+      borrowerName: customerName,
+      phone: body.phone || "N/A",
+      amount,
       givenDate: body.givenDate || new Date().toISOString().split("T")[0],
       status: "ACTIVE",
-      repaidAmount: 0
+      repaidAmount: 0,
+      payments: []
     });
+
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: new Date().toISOString(),
+      user: "Accounts Desk",
+      action: "HANDLOAN_ADVANCED",
+      details: `Auxiliary Hand Loan Advanced: ${item.loanNo} to ${customerName} (₹${amount.toLocaleString()})`
+    });
+
     res.status(201).json(item);
-  } catch (err) { res.status(500).json({ error: "Error creating hand loan" }); }
+  } catch (err) { 
+    console.error("[HandLoan] Error creating:", err);
+    res.status(500).json({ error: "Error creating hand loan" }); 
+  }
 });
+
 router.post("/handloans/:id/pay", async (req, res) => {
   try {
     const { id } = req.params;
-    const { amount } = req.body;
-    const hl = await HandLoanModel.findOne({ id });
+    const { amount, remarks } = req.body;
+    const payNum = Number(amount || 0);
+    const hl = await HandLoanModel.findOne({ $or: [{ id }, { loanNo: id }] });
     if (!hl) return res.status(404).json({ error: "Hand loan not found" });
 
-    hl.repaidAmount = (hl.repaidAmount || 0) + Number(amount || 0);
-    if (hl.repaidAmount >= hl.amount) hl.status = "PAID";
+    if (!Array.isArray(hl.payments)) {
+      hl.payments = [];
+    }
+    const paymentReceiptNo = `HL-RCP-${Date.now().toString().slice(-5)}`;
+    const paymentRecord = {
+      receiptNo: paymentReceiptNo,
+      amount: payNum,
+      date: new Date().toISOString().split("T")[0],
+      remarks: remarks || "Counter Cash Repayment"
+    };
+    hl.payments.push(paymentRecord);
+
+    hl.repaidAmount = (Number(hl.repaidAmount) || 0) + payNum;
+    if (hl.repaidAmount >= Number(hl.amount || 0)) {
+      hl.status = "PAID";
+    }
     await hl.save();
 
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: new Date().toISOString(),
+      user: "Counter Cashier",
+      action: "HANDLOAN_REPAID",
+      details: `Hand Loan Repayment Posted: ₹${payNum.toLocaleString()} for ${hl.customerName || hl.borrowerName} (${hl.loanNo || id}). New Balance: ₹${Math.max(0, (Number(hl.amount) || 0) - hl.repaidAmount).toLocaleString()}`
+    });
+
     res.json(hl);
-  } catch (err) { res.status(500).json({ error: "Error recording hand loan repayment" }); }
+  } catch (err) { 
+    console.error("[HandLoan] Error recording repayment:", err);
+    res.status(500).json({ error: "Error recording hand loan repayment" }); 
+  }
 });
 
 // 4. Seized Vehicles

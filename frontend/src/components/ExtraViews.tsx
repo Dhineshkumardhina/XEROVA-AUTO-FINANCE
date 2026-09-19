@@ -7,7 +7,8 @@ import React, { useState, useEffect } from "react";
 import { 
   PiggyBank, ShieldCheck, MapPin, Landmark, Coins, Scale, FileText, 
   UserCheck, AlertTriangle, Play, CheckCircle2, ChevronRight, Map, 
-  Navigation, Check, Plus, Search, Calendar, DollarSign, RefreshCw 
+  Navigation, Check, Plus, Search, Calendar, DollarSign, RefreshCw,
+  Printer, X, Receipt, ArrowDownRight, ArrowUpRight, History, Award
 } from "lucide-react";
 import { InteractiveWebMap } from "./InteractiveWebMap";
 
@@ -17,12 +18,14 @@ import { InteractiveWebMap } from "./InteractiveWebMap";
 export function DepositsView() {
   const [deposits, setDeposits] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedCert, setSelectedCert] = useState<any | null>(null);
   const [formData, setFormData] = useState({
     depositorName: "",
-    amount: "",
+    phone: "",
+    amount: "100000",
     rate: "8.5",
     months: "12",
-    remarks: "Branch fixed reserve"
+    remarks: "Branch fixed reserve certificate"
   });
 
   useEffect(() => {
@@ -44,6 +47,14 @@ export function DepositsView() {
     }
   };
 
+  // Real-time calculated maturity values
+  const numAmount = Number(formData.amount) || 0;
+  const numRate = Number(formData.rate) || 0;
+  const numMonths = Number(formData.months) || 12;
+  const calcInterest = Math.round((numAmount * numRate * (numMonths / 12)) / 100);
+  const calcMaturity = numAmount + calcInterest;
+  const calcMaturityDate = new Date(Date.now() + numMonths * 30.44 * 24 * 3600 * 1000).toISOString().split("T")[0];
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.depositorName || !formData.amount) return;
@@ -54,17 +65,27 @@ export function DepositsView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           depositorName: formData.depositorName,
-          amount: Number(formData.amount),
-          interestRate: Number(formData.rate),
-          durationMonths: Number(formData.months),
+          phone: formData.phone || "N/A",
+          amount: numAmount,
+          interestRate: numRate,
+          durationMonths: numMonths,
+          maturityAmount: calcMaturity,
+          maturityDate: calcMaturityDate,
           remarks: formData.remarks,
           date: new Date().toISOString().split("T")[0]
         })
       });
       if (res.ok) {
-        setFormData({ depositorName: "", amount: "", rate: "8.5", months: "12", remarks: "Branch fixed reserve" });
+        setFormData({ 
+          depositorName: "", 
+          phone: "", 
+          amount: "100000", 
+          rate: "8.5", 
+          months: "12", 
+          remarks: "Branch fixed reserve certificate" 
+        });
         fetchDeposits();
-        alert("Fixed Deposit certificate logged and booked persistently!");
+        alert("Fixed Deposit certificate booked and registered in branch books!");
       }
     } catch (e) {
       console.error(e);
@@ -73,124 +94,349 @@ export function DepositsView() {
     }
   };
 
+  const handleLiquidate = async (dep: any) => {
+    const defaultPayout = dep.maturityAmount || Math.round(dep.amount * (1 + (dep.interestRate / 100) * (dep.durationMonths / 12)));
+    if (!window.confirm(`Liquidate & Close Fixed Deposit ${dep.id} for ${dep.depositorName}?\nPrincipal: ₹${dep.amount?.toLocaleString()}\nSettlement Payout: ₹${defaultPayout.toLocaleString()}`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/deposits/${dep.id}/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ closedPayout: defaultPayout })
+      });
+      if (res.ok) {
+        fetchDeposits();
+        alert(`Fixed Deposit ${dep.id} closed and payout logged!`);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // KPI Calculations
+  const activeDeposits = deposits.filter(d => d.status !== "WITHDRAWN");
+  const totalPrincipal = activeDeposits.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+  const totalMaturity = activeDeposits.reduce((sum, d) => sum + Number(d.maturityAmount || (d.amount * (1 + (d.interestRate || 8.5) / 100 * (d.durationMonths || 12) / 12))), 0);
+  const avgRate = activeDeposits.length > 0 
+    ? (activeDeposits.reduce((sum, d) => sum + Number(d.interestRate || 8.5), 0) / activeDeposits.length).toFixed(1)
+    : "8.5";
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 font-sans text-xs">
-      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3.5">
-        <div>
-          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-            <PiggyBank className="h-4.5 w-4.5 text-indigo-600" />
-            Book Fixed Deposit (FD)
-          </h3>
-          <p className="text-[10px] text-slate-400 mt-0.5">Accept branch deposit capital to balance active Hire-Purchase lending books.</p>
+    <div className="space-y-4 font-sans text-xs">
+      
+      {/* Top Level Summary KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Deposit Capital</p>
+          <p className="text-lg font-black text-slate-900 font-mono mt-1">₹{totalPrincipal.toLocaleString()}</p>
+          <span className="text-[9px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
+            <Check className="h-3 w-3" /> Branch Lending Backing
+          </span>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Guaranteed Maturity Return</p>
+          <p className="text-lg font-black text-indigo-700 font-mono mt-1">₹{Math.round(totalMaturity).toLocaleString()}</p>
+          <span className="text-[9px] text-slate-500 font-medium mt-0.5 block">
+            Accrued Liability Total
+          </span>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active FD Certificates</p>
+          <p className="text-lg font-black text-slate-800 font-mono mt-1">{activeDeposits.length}</p>
+          <span className="text-[9px] text-slate-400 mt-0.5 block">
+            {deposits.length - activeDeposits.length} Liquidated
+          </span>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Weighted Interest Rate</p>
+          <p className="text-lg font-black text-amber-600 font-mono mt-1">{avgRate}% <span className="text-xs font-semibold text-slate-400">p.a.</span></p>
+          <span className="text-[9px] text-slate-500 font-medium mt-0.5 block">
+            Fixed Simple Payout
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Book FD Form Panel */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3.5">
           <div>
-            <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Depositor Name</label>
-            <input 
-              type="text" required placeholder="e.g. Shanmuga Sundaram"
-              value={formData.depositorName}
-              onChange={(e) => setFormData({...formData, depositorName: e.target.value})}
-              className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:outline-none focus:border-indigo-500"
-            />
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <PiggyBank className="h-4.5 w-4.5 text-indigo-600" />
+              Book Fixed Deposit (FD)
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-0.5">Accept branch deposit capital to balance active Hire-Purchase lending books.</p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">FD Amount (₹)</label>
+              <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Depositor Full Name</label>
               <input 
-                type="number" required placeholder="Amount"
-                value={formData.amount}
-                onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                type="text" required placeholder="e.g. Shanmuga Sundaram"
+                value={formData.depositorName}
+                onChange={(e) => setFormData({...formData, depositorName: e.target.value})}
+                className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:outline-none focus:border-indigo-500 font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Contact Phone</label>
+              <input 
+                type="tel" placeholder="e.g. 98401 22345"
+                value={formData.phone}
+                onChange={(e) => setFormData({...formData, phone: e.target.value})}
                 className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 font-mono focus:outline-none focus:border-indigo-500"
               />
             </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Principal Amount (₹)</label>
+                <input 
+                  type="number" required placeholder="Amount"
+                  value={formData.amount}
+                  onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 font-mono focus:outline-none focus:border-indigo-500 font-bold text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Interest (p.a %)</label>
+                <input 
+                  type="number" step="0.1" required
+                  value={formData.rate}
+                  onChange={(e) => setFormData({...formData, rate: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 font-mono focus:outline-none font-bold text-indigo-600"
+                />
+              </div>
+            </div>
+
             <div>
-              <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Interest (p.a %)</label>
+              <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Lock-In Tenure (Months)</label>
+              <select 
+                value={formData.months}
+                onChange={(e) => setFormData({...formData, months: e.target.value})}
+                className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:outline-none cursor-pointer font-medium"
+              >
+                <option value="6">6 Months (Half Yearly)</option>
+                <option value="12">12 Months (1 Year)</option>
+                <option value="24">24 Months (2 Years)</option>
+                <option value="36">36 Months (3 Years)</option>
+                <option value="60">60 Months (5 Years)</option>
+              </select>
+            </div>
+
+            {/* Live Interactive Maturity Preview Card */}
+            <div className="bg-indigo-50/70 border border-indigo-100 rounded-lg p-2.5 space-y-1.5 select-none">
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-indigo-900 font-bold uppercase flex items-center gap-1">
+                  <Award className="h-3.5 w-3.5 text-indigo-600" /> Projected Maturity
+                </span>
+                <span className="font-mono text-indigo-600 font-bold">{calcMaturityDate}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-[10px] text-indigo-700">Total Return:</span>
+                <span className="text-sm font-black font-mono text-indigo-900">₹{calcMaturity.toLocaleString()}</span>
+              </div>
+              <p className="text-[9px] text-indigo-600/80 italic">
+                Principal ₹{numAmount.toLocaleString()} + Accrued Interest ₹{calcInterest.toLocaleString()}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Audit Remarks</label>
               <input 
-                type="number" step="0.1" required
-                value={formData.rate}
-                onChange={(e) => setFormData({...formData, rate: e.target.value})}
-                className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 font-mono focus:outline-none"
+                type="text"
+                value={formData.remarks}
+                onChange={(e) => setFormData({...formData, remarks: e.target.value})}
+                className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:outline-none"
               />
             </div>
-          </div>
-          <div>
-            <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Lock-In Tenure (Months)</label>
-            <select 
-              value={formData.months}
-              onChange={(e) => setFormData({...formData, months: e.target.value})}
-              className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:outline-none cursor-pointer"
+
+            <button 
+              type="submit" disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded transition-colors shadow-sm cursor-pointer uppercase tracking-wider text-[11px]"
             >
-              <option value="6">6 Months (Half Yearly)</option>
-              <option value="12">12 Months (1 Year)</option>
-              <option value="24">24 Months (2 Years)</option>
-              <option value="36">36 Months (3 Years)</option>
-            </select>
+              {loading ? "Registering FD..." : "Confirm Book Deposit"}
+            </button>
+          </form>
+        </div>
+
+        {/* Portfolio Table Panel */}
+        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm lg:col-span-2 flex flex-col">
+          <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center select-none">
+            <h3 className="font-bold text-slate-800 uppercase text-xs">Active Fixed Deposits Portfolio</h3>
+            <span className="text-[9px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-2 py-0.5 rounded font-mono">
+              {deposits.length} Records
+            </span>
           </div>
-          <div>
-            <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Audit Remarks</label>
-            <input 
-              type="text"
-              value={formData.remarks}
-              onChange={(e) => setFormData({...formData, remarks: e.target.value})}
-              className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:outline-none"
-            />
+
+          <div className="flex-1 overflow-y-auto max-h-[440px]">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 text-[10px] font-bold uppercase tracking-wider select-none">
+                  <th className="px-3.5 py-2.5">Date / Cert</th>
+                  <th className="px-3.5 py-2.5">Depositor Info</th>
+                  <th className="px-3.5 py-2.5 text-right">Principal</th>
+                  <th className="px-3.5 py-2.5 text-center">Rate / Term</th>
+                  <th className="px-3.5 py-2.5 text-right">Maturity Return</th>
+                  <th className="px-3.5 py-2.5 text-center">Status</th>
+                  <th className="px-3.5 py-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-semibold text-[11px] text-slate-600">
+                {deposits.map((dep: any) => {
+                  const isWithdrawn = dep.status === "WITHDRAWN";
+                  const maturity = dep.maturityAmount || Math.round(Number(dep.amount || 0) * (1 + (Number(dep.interestRate || 8.5) / 100) * (Number(dep.durationMonths || 12) / 12)));
+                  return (
+                    <tr key={dep.id} className="hover:bg-slate-50">
+                      <td className="px-3.5 py-3">
+                        <p className="font-mono text-slate-800 font-bold text-[10px]">{dep.id}</p>
+                        <p className="font-mono text-[9px] text-slate-400 mt-0.5">{dep.date || dep.startDate}</p>
+                      </td>
+                      <td className="px-3.5 py-3">
+                        <p className="font-bold text-slate-800">{dep.depositorName}</p>
+                        <p className="text-[10px] text-slate-400 font-normal italic leading-none">{dep.phone && dep.phone !== "N/A" ? dep.phone : dep.remarks}</p>
+                      </td>
+                      <td className="px-3.5 py-3 text-right font-mono font-bold text-slate-900">
+                        ₹{Number(dep.amount || 0).toLocaleString()}
+                      </td>
+                      <td className="px-3.5 py-3 text-center">
+                        <span className="font-mono text-indigo-600 font-bold">{dep.interestRate || 8.5}%</span>
+                        <p className="text-[9px] text-slate-400 font-mono mt-0.5">{dep.durationMonths || 12}M</p>
+                      </td>
+                      <td className="px-3.5 py-3 text-right">
+                        <p className="font-mono font-bold text-emerald-700">₹{maturity.toLocaleString()}</p>
+                        <p className="text-[9px] text-slate-400 font-mono mt-0.5">{dep.maturityDate || "Maturity Due"}</p>
+                      </td>
+                      <td className="px-3.5 py-3 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${isWithdrawn ? "bg-slate-100 text-slate-600 border-slate-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
+                          {isWithdrawn ? "WITHDRAWN" : "ACTIVE"}
+                        </span>
+                      </td>
+                      <td className="px-3.5 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button 
+                            onClick={() => setSelectedCert(dep)}
+                            title="Print FD Certificate"
+                            className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                          </button>
+                          {!isWithdrawn && (
+                            <button 
+                              onClick={() => handleLiquidate(dep)}
+                              className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold transition-colors cursor-pointer"
+                            >
+                              Liquidate
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {deposits.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-12 text-slate-400 italic font-semibold">
+                      No fixed deposit certificates registered. Use the left form to book.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          <button 
-            type="submit" disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded transition-colors shadow-sm cursor-pointer"
-          >
-            {loading ? "Registering FD..." : "Confirm Book Deposit"}
-          </button>
-        </form>
+        </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm lg:col-span-2 flex flex-col">
-        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center select-none">
-          <h3 className="font-bold text-slate-800 uppercase text-xs">Active Fixed Deposits Portfolio</h3>
-          <span className="text-[9px] bg-indigo-50 border text-indigo-700 font-bold px-2 py-0.5 rounded font-mono">
-            {deposits.length} Accounts
-          </span>
-        </div>
-        <div className="flex-1 overflow-y-auto max-h-[420px]">
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 text-[10px] font-bold uppercase tracking-wider select-none">
-                <th className="px-4 py-2.5">Date booked</th>
-                <th className="px-4 py-2.5">Depositor Info</th>
-                <th className="px-4 py-2.5 text-right">Principal FD</th>
-                <th className="px-4 py-2.5 text-center">Rate</th>
-                <th className="px-4 py-2.5 text-center">Tenure</th>
-                <th className="px-4 py-2.5 text-center">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-[11px] text-slate-600">
-              {deposits.map((dep: any) => (
-                <tr key={dep.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-mono text-[10px] text-slate-400">{dep.date}</td>
-                  <td className="px-4 py-3">
-                    <p className="font-bold text-slate-800">{dep.depositorName}</p>
-                    <p className="text-[10px] text-slate-400 font-normal italic leading-none">{dep.remarks}</p>
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">₹{dep.amount?.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-center font-mono text-indigo-600">{dep.interestRate}%</td>
-                  <td className="px-4 py-3 text-center font-mono">{dep.durationMonths} Months</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
-                      {dep.status || "APPROVED"}
+      {/* Official Fixed Deposit Certificate Modal */}
+      {selectedCert && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans animate-fade-in">
+          <div className="bg-white rounded-xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden">
+            <div className="bg-slate-900 text-white px-5 py-3 flex justify-between items-center select-none">
+              <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <Award className="h-4 w-4 text-amber-400" /> Fixed Deposit Certificate
+              </span>
+              <button onClick={() => setSelectedCert(null)} className="p-1 text-slate-400 hover:text-white rounded">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 printable-print-block">
+              <div className="border-4 border-double border-indigo-900/20 p-5 rounded-lg space-y-4 bg-amber-50/20">
+                <div className="text-center border-b border-dashed border-slate-300 pb-3">
+                  <h2 className="text-base font-black text-indigo-950 uppercase tracking-tight">XEROVA AUTO FINANCE LIMITED</h2>
+                  <p className="text-[10px] text-slate-500 font-medium">Incorporated under NBFC / Auxiliary Credit Registry • Vellore HQ</p>
+                  <p className="text-[10px] font-mono font-bold text-indigo-800 mt-1 uppercase">FIXED DEPOSIT RECEIPT / CERTIFICATE</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">Certificate No</span>
+                    <span className="font-mono font-black text-slate-900">{selectedCert.id}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">Issue Date</span>
+                    <span className="font-mono font-bold text-slate-800">{selectedCert.date || selectedCert.startDate}</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-3 rounded border border-slate-200 space-y-1.5">
+                  <p className="text-slate-600 text-xs">
+                    Received with thanks from: <strong className="text-slate-900 text-sm">{selectedCert.depositorName}</strong>
+                  </p>
+                  <p className="text-slate-600 text-xs">
+                    The Principal Sum of: <strong className="text-indigo-950 font-mono text-sm">₹{Number(selectedCert.amount || 0).toLocaleString()}</strong>
+                  </p>
+                  <p className="text-slate-600 text-xs">
+                    Lock-In Tenure: <strong className="text-slate-900">{selectedCert.durationMonths || 12} Months</strong> @ <strong className="text-indigo-700">{selectedCert.interestRate || 8.5}% p.a.</strong>
+                  </p>
+                  <div className="border-t border-dashed border-slate-200 pt-1.5 mt-1.5 flex justify-between items-baseline">
+                    <span className="text-xs font-bold text-slate-700 uppercase">Guaranteed Maturity Return:</span>
+                    <span className="text-base font-black font-mono text-emerald-800">
+                      ₹{(selectedCert.maturityAmount || Math.round(Number(selectedCert.amount || 0) * (1 + (Number(selectedCert.interestRate || 8.5) / 100) * (Number(selectedCert.durationMonths || 12) / 12)))).toLocaleString()}
                     </span>
-                  </td>
-                </tr>
-              ))}
-              {deposits.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-400 italic font-semibold">No active FD entries saved. Use the left form to book.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-mono">
+                    Maturity Expiry Date: {selectedCert.maturityDate || "Upon Demand"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 pt-4 text-center text-[10px] text-slate-500 border-t border-dashed border-slate-300">
+                  <div>
+                    <div className="h-6"></div>
+                    <p className="border-t border-slate-400 pt-1 font-bold text-slate-700">Depositor Signature</p>
+                  </div>
+                  <div>
+                    <div className="h-6 flex items-center justify-center">
+                      <span className="text-[8px] bg-indigo-100 text-indigo-800 font-bold px-1.5 py-0.5 rounded font-mono">SEAL & VERIFIED</span>
+                    </div>
+                    <p className="border-t border-slate-400 pt-1 font-bold text-slate-700">Authorized Branch Officer</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button 
+                  onClick={() => setSelectedCert(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-1.5 rounded font-bold text-xs uppercase"
+                >
+                  Dismiss
+                </button>
+                <button 
+                  onClick={() => window.print()}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded font-bold text-xs flex items-center gap-1.5 uppercase shadow-sm cursor-pointer"
+                >
+                  <Printer className="h-3.5 w-3.5" /> Print Certificate
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
     </div>
   );
 }
@@ -356,9 +602,20 @@ export function BindingLoanView() {
 export function HLPaymentView() {
   const [handloans, setHandloans] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"pay" | "advance">("pay");
   const [selectedHlId, setSelectedHlId] = useState("");
   const [payAmount, setPayAmount] = useState("");
   const [payRemarks, setPayRemarks] = useState("");
+  const [selectedLedgerHl, setSelectedLedgerHl] = useState<any | null>(null);
+
+  // New Hand Loan Advance Form State
+  const [advanceForm, setAdvanceForm] = useState({
+    customerName: "",
+    phone: "",
+    amount: "25000",
+    promisedReturnDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split("T")[0],
+    remarks: "Counter auxiliary advance - 30 days return"
+  });
 
   useEffect(() => {
     fetchHandloans();
@@ -375,6 +632,14 @@ export function HLPaymentView() {
       console.error(e);
     }
   };
+
+  const selectedHl = handloans.find(h => h.id === selectedHlId);
+  const selectedHlPaid = selectedHl 
+    ? Number(selectedHl.repaidAmount ?? selectedHl.payments?.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0) ?? 0)
+    : 0;
+  const selectedHlBalance = selectedHl 
+    ? Math.max(0, Number(selectedHl.amount || 0) - selectedHlPaid)
+    : 0;
 
   const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -393,7 +658,7 @@ export function HLPaymentView() {
         setPayAmount("");
         setPayRemarks("");
         fetchHandloans();
-        alert("Hand loan payment posted and balanced in auxiliary ledger!");
+        alert("Hand loan repayment posted and balanced in auxiliary ledger!");
       }
     } catch (e) {
       console.error(e);
@@ -402,109 +667,412 @@ export function HLPaymentView() {
     }
   };
 
+  const handleAdvanceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!advanceForm.customerName || !advanceForm.amount) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/handloans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: advanceForm.customerName,
+          borrowerName: advanceForm.customerName,
+          phone: advanceForm.phone || "N/A",
+          amount: Number(advanceForm.amount),
+          promisedReturnDate: advanceForm.promisedReturnDate,
+          remarks: advanceForm.remarks,
+          givenDate: new Date().toISOString().split("T")[0]
+        })
+      });
+      if (res.ok) {
+        setAdvanceForm({
+          customerName: "",
+          phone: "",
+          amount: "25000",
+          promisedReturnDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split("T")[0],
+          remarks: "Counter auxiliary advance - 30 days return"
+        });
+        fetchHandloans();
+        setActiveTab("pay");
+        alert("New auxiliary hand loan advance issued and registered in logbook!");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // KPI Calculations
+  const totalAdvanced = handloans.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+  const totalRepaid = handloans.reduce((sum, h) => {
+    const paid = Number(h.repaidAmount ?? h.payments?.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0) ?? 0);
+    return sum + paid;
+  }, 0);
+  const totalOutstanding = Math.max(0, totalAdvanced - totalRepaid);
+  const activeCount = handloans.filter(h => {
+    const paid = Number(h.repaidAmount ?? h.payments?.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0) ?? 0);
+    return (Number(h.amount) || 0) > paid && h.status !== "PAID";
+  }).length;
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 font-sans text-xs">
-      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3.5">
-        <div>
-          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-            <Coins className="h-4.5 w-4.5 text-indigo-600" />
-            Post Hand Loan Payment
-          </h3>
-          <p className="text-[10px] text-slate-400 mt-0.5">Collect and balance zero-interest auxiliary hand loan cash advances.</p>
-        </div>
-
-        <form onSubmit={handlePaySubmit} className="space-y-3">
-          <div>
-            <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Select Active Borrower</label>
-            <select 
-              value={selectedHlId}
-              required
-              onChange={(e) => setSelectedHlId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded p-1.5 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">-- Choose Account --</option>
-              {handloans.filter(hl => hl.status === "ACTIVE").map(hl => (
-                <option key={hl.id} value={hl.id}>{hl.loanNo} - {hl.customerName} (Due: ₹{hl.amount})</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Post Pay Amount (₹)</label>
-            <input 
-              type="number" required placeholder="₹"
-              value={payAmount}
-              onChange={(e) => setPayAmount(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 font-mono focus:outline-none focus:border-indigo-500 font-bold text-slate-800"
-            />
-          </div>
-          <div>
-            <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Payment Receipt Remarks</label>
-            <input 
-              type="text" placeholder="e.g. Cleared full tax difference..."
-              value={payRemarks}
-              onChange={(e) => setPayRemarks(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:outline-none"
-            />
-          </div>
-          <button 
-            type="submit" disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded transition-colors shadow-sm cursor-pointer"
-          >
-            {loading ? "Posting payment..." : "Commit HL Posting"}
-          </button>
-        </form>
-      </div>
-
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm lg:col-span-2 flex flex-col">
-        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center select-none">
-          <h3 className="font-bold text-slate-800 uppercase text-xs">Auxiliary Hand Loans Logbook</h3>
-          <span className="text-[9px] bg-amber-50 border text-amber-700 font-bold px-2 py-0.5 rounded font-mono animate-pulse">
-            Short-term advances
+    <div className="space-y-4 font-sans text-xs">
+      
+      {/* Top Level Summary KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Hand Loans Disbursed</p>
+          <p className="text-lg font-black text-slate-900 font-mono mt-1">₹{totalAdvanced.toLocaleString()}</p>
+          <span className="text-[9px] text-slate-500 font-medium mt-0.5 block">
+            Auxiliary Cash Capital
           </span>
         </div>
-        <div className="flex-1 overflow-y-auto max-h-[420px]">
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 text-[10px] font-bold uppercase tracking-wider select-none">
-                <th className="px-4 py-2.5">A/C No</th>
-                <th className="px-4 py-2.5">Borrower Name</th>
-                <th className="px-4 py-2.5 text-right">Advance HL</th>
-                <th className="px-4 py-2.5 text-right">Paid to Date</th>
-                <th className="px-4 py-2.5 text-right">Balance</th>
-                <th className="px-4 py-2.5 text-center">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-[11px] text-slate-600">
-              {handloans.map((hl: any) => {
-                const paid = hl.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
-                const balance = hl.amount - paid;
-                return (
-                  <tr key={hl.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-mono font-bold text-slate-800">{hl.loanNo}</td>
-                    <td className="px-4 py-3">
-                      <p className="font-bold text-slate-800">{hl.customerName}</p>
-                      <p className="text-[10px] text-slate-400 font-normal italic leading-none">{hl.remarks}</p>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono">₹{hl.amount?.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right font-mono text-emerald-600">₹{paid?.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">₹{balance?.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${hl.status === "ACTIVE" ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
-                        {hl.status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-              {handloans.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-400 italic font-semibold">No auxiliary hand loan ledgers found.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+
+        <div className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Repayments Collected</p>
+          <p className="text-lg font-black text-emerald-700 font-mono mt-1">₹{totalRepaid.toLocaleString()}</p>
+          <span className="text-[9px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
+            <Check className="h-3 w-3" /> Recovered to Date
+          </span>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Net Auxiliary Balance Due</p>
+          <p className="text-lg font-black text-amber-600 font-mono mt-1">₹{totalOutstanding.toLocaleString()}</p>
+          <span className="text-[9px] text-amber-700 font-medium mt-0.5 block">
+            Outstanding Counter Dues
+          </span>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Borrowers</p>
+          <p className="text-lg font-black text-indigo-700 font-mono mt-1">{activeCount}</p>
+          <span className="text-[9px] text-slate-400 mt-0.5 block">
+            {handloans.length - activeCount} Fully Settled
+          </span>
         </div>
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Left Interactive Operations Panel */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3.5">
+          <div className="flex justify-between items-start border-b border-slate-100 pb-2">
+            <div>
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Coins className="h-4.5 w-4.5 text-indigo-600" />
+                Hand Loan Desk
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">Manage zero-interest auxiliary short-term counter advances.</p>
+            </div>
+            
+            {/* Tab Toggle */}
+            <div className="flex bg-slate-100 p-0.5 rounded border border-slate-200 select-none">
+              <button 
+                onClick={() => setActiveTab("pay")}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${activeTab === "pay" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-500 hover:text-slate-800"}`}
+              >
+                Repayment
+              </button>
+              <button 
+                onClick={() => setActiveTab("advance")}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${activeTab === "advance" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-500 hover:text-slate-800"}`}
+              >
+                New Loan
+              </button>
+            </div>
+          </div>
+
+          {/* Mode 1: Post Repayment Form */}
+          {activeTab === "pay" && (
+            <form onSubmit={handlePaySubmit} className="space-y-3">
+              <div>
+                <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Select Active Borrower</label>
+                <select 
+                  value={selectedHlId}
+                  required
+                  onChange={(e) => setSelectedHlId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded p-1.5 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">-- Choose Account --</option>
+                  {handloans.filter(hl => {
+                    const paid = Number(hl.repaidAmount ?? hl.payments?.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0) ?? 0);
+                    return (Number(hl.amount) || 0) > paid && hl.status !== "PAID";
+                  }).map(hl => {
+                    const paid = Number(hl.repaidAmount ?? hl.payments?.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0) ?? 0);
+                    const due = Math.max(0, Number(hl.amount || 0) - paid);
+                    return (
+                      <option key={hl.id} value={hl.id}>
+                        {hl.loanNo} - {hl.customerName || hl.borrowerName} (Balance: ₹{due.toLocaleString()})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Selected Borrower Details Preview */}
+              {selectedHl && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-1 text-[10px]">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Initial Advance:</span>
+                    <strong className="font-mono text-slate-900">₹{Number(selectedHl.amount || 0).toLocaleString()}</strong>
+                  </div>
+                  <div className="flex justify-between text-emerald-700">
+                    <span>Already Repaid:</span>
+                    <strong className="font-mono">₹{selectedHlPaid.toLocaleString()}</strong>
+                  </div>
+                  <div className="flex justify-between text-rose-700 border-t border-slate-200 pt-1 font-bold">
+                    <span>Remaining Balance:</span>
+                    <strong className="font-mono text-xs">₹{selectedHlBalance.toLocaleString()}</strong>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Post Pay Amount (₹)</label>
+                <input 
+                  type="number" required placeholder="₹"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 font-mono focus:outline-none focus:border-indigo-500 font-bold text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Payment Receipt Remarks</label>
+                <input 
+                  type="text" placeholder="e.g. Counter Cash Settlement..."
+                  value={payRemarks}
+                  onChange={(e) => setPayRemarks(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:outline-none"
+                />
+              </div>
+
+              <button 
+                type="submit" disabled={loading}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded transition-colors shadow-sm cursor-pointer uppercase tracking-wider text-[11px]"
+              >
+                {loading ? "Posting payment..." : "Commit HL Repayment"}
+              </button>
+            </form>
+          )}
+
+          {/* Mode 2: Issue New Hand Loan Form */}
+          {activeTab === "advance" && (
+            <form onSubmit={handleAdvanceSubmit} className="space-y-3">
+              <div>
+                <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Borrower Client Name</label>
+                <input 
+                  type="text" required placeholder="e.g. K. Arulmurugan"
+                  value={advanceForm.customerName}
+                  onChange={(e) => setAdvanceForm({...advanceForm, customerName: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:outline-none focus:border-indigo-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Contact Phone</label>
+                <input 
+                  type="tel" placeholder="e.g. 94432 10987"
+                  value={advanceForm.phone}
+                  onChange={(e) => setAdvanceForm({...advanceForm, phone: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 font-mono focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Advance Amount (₹)</label>
+                  <input 
+                    type="number" required placeholder="Amount"
+                    value={advanceForm.amount}
+                    onChange={(e) => setAdvanceForm({...advanceForm, amount: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 font-mono focus:outline-none focus:border-indigo-500 font-bold text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Promised Return</label>
+                  <input 
+                    type="date" required
+                    value={advanceForm.promisedReturnDate}
+                    onChange={(e) => setAdvanceForm({...advanceForm, promisedReturnDate: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 font-mono focus:outline-none text-[10px]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[8px] text-slate-500 font-bold uppercase mb-0.5">Purpose / Terms</label>
+                <input 
+                  type="text"
+                  value={advanceForm.remarks}
+                  onChange={(e) => setAdvanceForm({...advanceForm, remarks: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 focus:outline-none"
+                />
+              </div>
+
+              <button 
+                type="submit" disabled={loading}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded transition-colors shadow-sm cursor-pointer uppercase tracking-wider text-[11px]"
+              >
+                {loading ? "Recording Advance..." : "Authorize HL Advance"}
+              </button>
+            </form>
+          )}
+        </div>
+
+        {/* Right Logbook Table Panel */}
+        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm lg:col-span-2 flex flex-col">
+          <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center select-none">
+            <h3 className="font-bold text-slate-800 uppercase text-xs">Auxiliary Hand Loans Logbook</h3>
+            <span className="text-[9px] bg-amber-50 border border-amber-200 text-amber-700 font-bold px-2 py-0.5 rounded font-mono">
+              {handloans.length} Accounts
+            </span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto max-h-[440px]">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 text-[10px] font-bold uppercase tracking-wider select-none">
+                  <th className="px-3.5 py-2.5">A/C No</th>
+                  <th className="px-3.5 py-2.5">Borrower Details</th>
+                  <th className="px-3.5 py-2.5 text-right">Advance HL</th>
+                  <th className="px-3.5 py-2.5 text-right">Repaid to Date</th>
+                  <th className="px-3.5 py-2.5 text-right">Balance Due</th>
+                  <th className="px-3.5 py-2.5 text-center">Status</th>
+                  <th className="px-3.5 py-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-semibold text-[11px] text-slate-600">
+                {handloans.map((hl: any) => {
+                  const paid = Number(hl.repaidAmount ?? hl.payments?.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) ?? 0);
+                  const balance = Math.max(0, (Number(hl.amount) || 0) - paid);
+                  const isPaid = balance === 0 || hl.status === "PAID";
+
+                  return (
+                    <tr key={hl.id} className="hover:bg-slate-50">
+                      <td className="px-3.5 py-3">
+                        <span className="font-mono font-bold text-slate-800 text-[10px] block">{hl.loanNo || hl.id}</span>
+                        <span className="text-[9px] text-slate-400 font-mono">{hl.givenDate || "Direct"}</span>
+                      </td>
+                      <td className="px-3.5 py-3">
+                        <p className="font-bold text-slate-800">{hl.customerName || hl.borrowerName}</p>
+                        <p className="text-[10px] text-slate-400 font-normal italic leading-none">{hl.phone && hl.phone !== "N/A" ? hl.phone : hl.remarks}</p>
+                      </td>
+                      <td className="px-3.5 py-3 text-right font-mono font-bold text-slate-800">₹{Number(hl.amount || 0).toLocaleString()}</td>
+                      <td className="px-3.5 py-3 text-right font-mono text-emerald-600">₹{paid.toLocaleString()}</td>
+                      <td className="px-3.5 py-3 text-right font-mono font-bold text-slate-900">₹{balance.toLocaleString()}</td>
+                      <td className="px-3.5 py-3 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                          {isPaid ? "PAID / SETTLED" : "ACTIVE"}
+                        </span>
+                      </td>
+                      <td className="px-3.5 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {!isPaid && (
+                            <button 
+                              onClick={() => {
+                                setSelectedHlId(hl.id);
+                                setActiveTab("pay");
+                                setPayAmount(String(balance));
+                              }}
+                              className="px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-bold transition-colors cursor-pointer"
+                            >
+                              Repay
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => setSelectedLedgerHl(hl)}
+                            title="View Payment Ledger History"
+                            className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                          >
+                            <History className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {handloans.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-12 text-slate-400 italic font-semibold">
+                      No auxiliary hand loan ledgers recorded. Use the left form to issue advances.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Hand Loan Repayments Ledger History Modal */}
+      {selectedLedgerHl && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans animate-fade-in">
+          <div className="bg-white rounded-xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden">
+            <div className="bg-slate-900 text-white px-5 py-3 flex justify-between items-center select-none">
+              <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <History className="h-4 w-4 text-indigo-400" /> Auxiliary Repayments Ledger
+              </span>
+              <button onClick={() => setSelectedLedgerHl(null)} className="p-1 text-slate-400 hover:text-white rounded">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5">
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Borrower:</span>
+                  <strong className="text-slate-900">{selectedLedgerHl.customerName || selectedLedgerHl.borrowerName}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Account No:</span>
+                  <span className="font-mono font-bold text-slate-800">{selectedLedgerHl.loanNo || selectedLedgerHl.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Original Advance:</span>
+                  <span className="font-mono font-bold text-slate-900">₹{Number(selectedLedgerHl.amount || 0).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Repayment Transaction Logs</h4>
+                <div className="max-h-[220px] overflow-y-auto space-y-1.5">
+                  {selectedLedgerHl.payments && selectedLedgerHl.payments.length > 0 ? (
+                    selectedLedgerHl.payments.map((p: any, idx: number) => (
+                      <div key={idx} className="bg-emerald-50/50 border border-emerald-100 p-2.5 rounded flex justify-between items-center text-xs">
+                        <div>
+                          <p className="font-mono font-bold text-slate-800 text-[10px]">{p.receiptNo || `RCP-${idx + 1}`}</p>
+                          <p className="text-[10px] text-slate-500 italic mt-0.5">{p.remarks || "Counter Repayment"}</p>
+                          <p className="text-[9px] text-slate-400 font-mono">{p.date}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-mono font-black text-emerald-800 text-sm">₹{Number(p.amount).toLocaleString()}</span>
+                          <span className="text-[8px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded block mt-0.5 uppercase">VERIFIED</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-6 text-slate-400 italic text-[11px] border border-dashed rounded-lg">
+                      No repayments recorded against this advance yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2 border-t border-slate-100">
+                <button 
+                  onClick={() => setSelectedLedgerHl(null)}
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-1.5 rounded font-bold text-xs uppercase"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
