@@ -24,8 +24,8 @@
     "dev:backend": "npm run dev -w @xerova/backend",
     "dev:frontend": "npm run dev -w @xerova/frontend",
     "seed": "npm run seed -w @xerova/database",
-    "build": "npm run build -w @xerova/database && npm run build -w @xerova/backend && npm run build -w @xerova/frontend && node -e \"require('fs').cpSync('frontend/dist', 'dist', { recursive: true })\"",
-    "vercel-build": "npm run build -w @xerova/database && npm run build -w @xerova/backend && npm run build -w @xerova/frontend && node -e \"require('fs').cpSync('frontend/dist', 'dist', { recursive: true })\""
+    "build": "npm run build -w @xerova/database && npm run build -w @xerova/backend && npm run build -w @xerova/frontend && node scripts/bundle-vercel.js",
+    "vercel-build": "npm run build -w @xerova/database && npm run build -w @xerova/backend && npm run build -w @xerova/frontend && node scripts/bundle-vercel.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
