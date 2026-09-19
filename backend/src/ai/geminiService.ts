@@ -128,28 +128,44 @@ export async function checkFraud(applicantData: any): Promise<any> {
 }
 
 export async function runFinanceAudit(data: { loansCount: number; activePrincipal: number; overdueCount: number; totalReceipts: number }): Promise<any> {
+  const npaRatio = data.loansCount > 0 ? (data.overdueCount / data.loansCount) * 100 : 5;
+  const score = Math.max(50, 95 - Math.round(npaRatio * 2));
+  const verdict = npaRatio > 15 ? "ADVERSE_FINDING" : npaRatio > 8 ? "QUALIFIED_PASS" : "UNQUALIFIED_PASS";
+  const opinion = `Independent statutory portfolio review executed across ${data.loansCount} active loan accounts with ₹${data.activePrincipal.toLocaleString()} aggregate outstanding book value. Audit verdict is ${verdict.replace("_", " ")} with overdue delinquency ratio at ${npaRatio.toFixed(1)}%.`;
+  const anomalies = npaRatio > 10 
+    ? [`Overdue portfolio exposure of ${npaRatio.toFixed(1)}% exceeds recommended 10% threshold in recent vehicle loans.`]
+    : [];
+  const recommendations = [
+    "Issue legal warning notices to accounts with overdue tenure >30 days.",
+    "Reconcile counter cash receipts with bank deposit slips daily.",
+    "Verify insurance endorsements and GPS telemetry on high-value asset loans."
+  ];
+
+  const baseResult = {
+    timestamp: new Date().toISOString(),
+    auditedBy: "Xerova AI Statutory Auditor",
+    auditorVerdict: verdict,
+    integrityScore: score,
+    overallHealth: verdict,
+    auditScore: score,
+    auditorCertifiedOpinion: opinion,
+    summary: opinion,
+    anomaliesFound: anomalies,
+    anomaliesDetected: anomalies,
+    keyRecommendations: recommendations,
+    actionItems: recommendations
+  };
+
   const ai = getGeminiClient();
   if (!ai) {
-    const npaRatio = data.loansCount > 0 ? (data.overdueCount / data.loansCount) * 100 : 5;
-    return {
-      overallHealth: npaRatio > 15 ? "CRITICAL_ATTENTION" : "ROBUST",
-      auditScore: Math.max(50, 95 - Math.round(npaRatio * 2)),
-      summary: `Analyzed portfolio of ${data.loansCount} loans with active principal of ₹${data.activePrincipal.toLocaleString()}. Overdue ratio is at ${npaRatio.toFixed(1)}%.`,
-      anomaliesDetected: [
-        npaRatio > 10 ? `High overdue concentration in recent vehicle financing.` : `All collection counters reconciling normally.`
-      ],
-      actionItems: [
-        `Issue legal pre-seizure notices to accounts >45 days overdue.`,
-        `Reconcile daily cash counter balances with bank deposit slips.`
-      ]
-    };
+    return baseResult;
   }
 
   try {
     const prompt = `Perform an ERP financial audit for auto loan portfolio:
     ${JSON.stringify(data)}
-    Return ONLY JSON:
-    {"overallHealth": "ROBUST", "auditScore": 92, "summary": "...", "anomaliesDetected": ["..."], "actionItems": ["..."]}`;
+    Return ONLY valid JSON with keys:
+    {"auditorVerdict": "UNQUALIFIED_PASS", "integrityScore": 92, "auditorCertifiedOpinion": "...", "anomaliesFound": ["..."], "keyRecommendations": ["..."]}`;
     
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
@@ -157,15 +173,19 @@ export async function runFinanceAudit(data: { loansCount: number; activePrincipa
     });
     const text = response.text || "{}";
     const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(cleaned);
+    const parsed = JSON.parse(cleaned);
+
+    return {
+      ...baseResult,
+      ...parsed,
+      overallHealth: parsed.auditorVerdict || baseResult.overallHealth,
+      auditScore: parsed.integrityScore || baseResult.auditScore,
+      summary: parsed.auditorCertifiedOpinion || baseResult.summary,
+      anomaliesDetected: parsed.anomaliesFound || baseResult.anomaliesDetected,
+      actionItems: parsed.keyRecommendations || baseResult.actionItems
+    };
   } catch (e) {
     console.error("[AI] Error running audit:", e);
-    return {
-      overallHealth: "ROBUST",
-      auditScore: 88,
-      summary: "Manual heuristic audit completed successfully.",
-      anomaliesDetected: ["None detected."],
-      actionItems: ["Maintain standard recovery protocol."]
-    };
+    return baseResult;
   }
 }

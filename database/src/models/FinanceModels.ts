@@ -27,6 +27,11 @@ export interface IDeposit {
   maturityDate: string;
   maturityAmount: number;
   status: "ACTIVE" | "MATURED" | "WITHDRAWN";
+  closedDate?: string;
+  closedPayout?: number;
+  closureRemarks?: string;
+  monthlyInterestPayout?: number;
+  notes?: string;
   createdAt?: string;
   updatedAt?: string;
   save?: () => Promise<any>;
@@ -43,7 +48,10 @@ export interface IHandLoan {
   givenDate: string;
   promisedReturnDate: string;
   status: "ACTIVE" | "PAID" | "DEFAULTED";
+  loanNo?: string;
+  customerName?: string;
   repaidAmount?: number;
+  payments?: any[];
   createdAt?: string;
   updatedAt?: string;
   save?: () => Promise<any>;
@@ -89,6 +97,10 @@ export interface IEmployeeSession {
   sessionId: string;
   userId: string;
   username: string;
+  id?: string;
+  name?: string;
+  role?: string;
+  duration?: string;
   loginTime: string;
   logoutTime?: string | null;
   ipAddress?: string;

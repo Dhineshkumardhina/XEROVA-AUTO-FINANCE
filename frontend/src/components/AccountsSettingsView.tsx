@@ -8,7 +8,7 @@ import {
   Settings, Users, FileWarning, Printer, Plus, ShieldAlert, DollarSign, 
   Table, Check, Activity, ShieldCheck, AlertTriangle, FileCheck, Search, 
   SlidersHorizontal, RefreshCw, BarChart3, Fingerprint, Award, CheckCircle2,
-  FileText
+  FileText, Trash2
 } from "lucide-react";
 
 interface AccountsSettingsViewProps {
@@ -52,6 +52,18 @@ export default function AccountsSettingsView({ initialPanel = "masters" }: Accou
   // Employee Shift Tracker State
   const [sessions, setSessions] = useState<any[]>([]);
 
+  // Global Settings State
+  const [settings, setSettings] = useState({
+    companyName: "XEROVA AUTO FINANCE & LEASING",
+    branchCode: "MADURAI-#01",
+    defaultInterestRate: "16.5",
+    overduePenaltyPerDay: "100",
+    gracePeriodDays: "5",
+    smsGateway: "Simulated Developer Console"
+  });
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSuccess, setSettingsSuccess] = useState("");
+
   // Reports Summaries
   const [stats, setStats] = useState<any>({
     activePrincipal: 2840000,
@@ -64,6 +76,7 @@ export default function AccountsSettingsView({ initialPanel = "masters" }: Accou
   useEffect(() => {
     fetchMasters();
     fetchLoans();
+    fetchSettings();
   }, []);
 
   useEffect(() => {
@@ -72,6 +85,9 @@ export default function AccountsSettingsView({ initialPanel = "masters" }: Accou
     }
     if (activePanel === "reports") {
       fetchAuditLogs();
+    }
+    if (activePanel === "general") {
+      fetchSettings();
     }
   }, [activePanel]);
 
@@ -142,8 +158,66 @@ export default function AccountsSettingsView({ initialPanel = "masters" }: Accou
       const res = await fetch("/api/loans");
       const data = await res.json();
       setLoans(data);
+      if (Array.isArray(data) && data.length > 0) {
+        const totalPrincipal = data.reduce((s: number, l: any) => s + (l.loanAmount || 0), 0);
+        const totalInt = data.reduce((s: number, l: any) => s + Math.round((l.loanAmount || 0) * ((l.interestRate || 14) / 100) * ((l.durationMonths || 24) / 12)), 0);
+        setStats((prev: any) => ({
+          ...prev,
+          activePrincipal: totalPrincipal || prev.activePrincipal,
+          expectedInterest: totalInt || prev.expectedInterest
+        }));
+      }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch("/api/settings");
+      if (res.ok) {
+        const data = await res.json();
+        setSettings((prev) => ({
+          ...prev,
+          companyName: data.companyName ?? prev.companyName,
+          branchCode: data.branchCode ?? prev.branchCode,
+          defaultInterestRate: data.defaultInterestRate?.toString() ?? prev.defaultInterestRate,
+          overduePenaltyPerDay: data.overduePenaltyPerDay?.toString() ?? prev.overduePenaltyPerDay,
+          gracePeriodDays: data.gracePeriodDays?.toString() ?? prev.gracePeriodDays,
+          smsGateway: data.smsGateway ?? prev.smsGateway
+        }));
+      }
+    } catch (err) {
+      console.error("Error fetching settings:", err);
+    }
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsSaving(true);
+    setSettingsSuccess("");
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName: settings.companyName,
+          branchCode: settings.branchCode,
+          defaultInterestRate: Number(settings.defaultInterestRate) || 16.5,
+          overduePenaltyPerDay: Number(settings.overduePenaltyPerDay) || 100,
+          gracePeriodDays: Number(settings.gracePeriodDays) || 5,
+          smsGateway: settings.smsGateway
+        })
+      });
+      if (res.ok) {
+        setSettingsSuccess("Global corporate configurations committed successfully to database.");
+        fetchAuditLogs();
+        setTimeout(() => setSettingsSuccess(""), 4000);
+      }
+    } catch (err) {
+      console.error("Error saving settings:", err);
+    } finally {
+      setSettingsSaving(false);
     }
   };
 
@@ -160,11 +234,37 @@ export default function AccountsSettingsView({ initialPanel = "masters" }: Accou
       if (res.ok) {
         setNewMaster({ name: "", category: "dealer", phone: "", commissionPct: "2" });
         fetchMasters();
+        fetchAuditLogs();
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteMaster = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete sourcing master "${name}"?`)) return;
+    try {
+      const res = await fetch(`/api/masters/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        fetchMasters();
+        fetchAuditLogs();
+      }
+    } catch (err) {
+      console.error("Error deleting master:", err);
+    }
+  };
+
+  const handleClockOut = async (id: string) => {
+    try {
+      const res = await fetch(`/api/employee/sessions/${id}/logout`, { method: "POST" });
+      if (res.ok) {
+        fetchSessions();
+        fetchAuditLogs();
+      }
+    } catch (err) {
+      console.error("Error clocking out session:", err);
     }
   };
 
@@ -282,20 +382,46 @@ export default function AccountsSettingsView({ initialPanel = "masters" }: Accou
                 </form>
 
                 {/* List of existing */}
-                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-2 max-h-[300px] overflow-y-auto shadow-inner">
-                  <h4 className="text-xs font-bold text-slate-800 font-sans uppercase">Active Sourcing Masters ({masters.length})</h4>
+                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-2 max-h-[320px] overflow-y-auto shadow-inner">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-bold text-slate-800 font-sans uppercase">Active Sourcing Masters ({masters.length})</h4>
+                    <button
+                      type="button"
+                      onClick={fetchMasters}
+                      className="text-[10px] text-slate-500 hover:text-slate-800 font-mono flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" /> Refresh
+                    </button>
+                  </div>
                   <div className="space-y-1.5">
-                    {masters.map((m) => (
-                      <div key={m.id} className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
-                        <div>
-                          <p className="font-bold text-slate-800">{m.name}</p>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase">{m.category}</p>
+                    {masters.length === 0 ? (
+                      <p className="text-[10px] text-slate-400 font-mono py-4 text-center">No sourcing masters recorded.</p>
+                    ) : (
+                      masters.map((m) => (
+                        <div key={m.id} className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-200 shadow-sm hover:border-slate-300 transition-colors">
+                          <div>
+                            <p className="font-bold text-slate-800">{m.name}</p>
+                            <div className="flex items-center gap-2 text-[9px] text-slate-400">
+                              <span className="font-bold uppercase">{m.category}</span>
+                              {m.phone && m.phone !== "N/A" && <span>• {m.phone}</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono font-bold border border-blue-200">
+                              {m.commissionPct || 2}% Comm
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMaster(m.id, m.name)}
+                              title="Delete Master Record"
+                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
-                        <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono font-bold border border-blue-200">
-                          {m.commissionPct || 2}% Comm
-                        </span>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -765,10 +891,20 @@ export default function AccountsSettingsView({ initialPanel = "masters" }: Accou
                           </td>
                           <td className="px-4 py-3 text-right">
                             {!sess.logoutTime ? (
-                              <span className="inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-700 px-2 py-0.5 rounded text-[9px] font-bold uppercase font-mono animate-pulse">
-                                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                                On-Shift Now
-                              </span>
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-700 px-2 py-0.5 rounded text-[9px] font-bold uppercase font-mono animate-pulse">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                                  On-Shift
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleClockOut(sess.id)}
+                                  className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 px-2 py-1 rounded text-[9px] font-bold font-mono transition-colors cursor-pointer"
+                                  title="Clock out this staff shift now"
+                                >
+                                  Clock Out
+                                </button>
+                              </div>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-500 px-2 py-0.5 rounded text-[9px] font-bold uppercase font-mono">
                                 Shift Complete
@@ -786,40 +922,96 @@ export default function AccountsSettingsView({ initialPanel = "masters" }: Accou
 
           {/* System settings */}
           {activePanel === "general" && (
-            <div className="space-y-4 font-sans text-xs">
-              <h3 className="text-xs font-bold text-slate-800 flex items-center gap-2 border-b border-slate-200 pb-2 uppercase">
-                <Settings className="h-4 w-4 text-blue-600" /> Global Finance Parameters configuration
-              </h3>
+            <form onSubmit={handleSaveSettings} className="space-y-4 font-sans text-xs">
+              <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                <h3 className="text-xs font-bold text-slate-800 flex items-center gap-2 uppercase">
+                  <Settings className="h-4 w-4 text-blue-600" /> Global Corporate & Finance Parameters
+                </h3>
+                <button
+                  type="button"
+                  onClick={fetchSettings}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded text-[10px] font-bold font-mono transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw className="h-3 w-3" /> Reload Current
+                </button>
+              </div>
+
+              {settingsSuccess && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                  {settingsSuccess}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Standard flat interest rate (% p.a)</label>
-                  <input type="number" defaultValue="12" className="w-full bg-slate-50 border border-slate-200 text-slate-850 rounded px-2.5 py-1 text-xs focus:outline-none focus:border-blue-500 font-mono" />
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Registered Entity Company Name</label>
+                  <input
+                    type="text"
+                    value={settings.companyName}
+                    onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-blue-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Operating Branch Code</label>
+                  <input
+                    type="text"
+                    value={settings.branchCode}
+                    onChange={(e) => setSettings({ ...settings, branchCode: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Standard Flat Interest Rate (% p.a)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={settings.defaultInterestRate}
+                    onChange={(e) => setSettings({ ...settings, defaultInterestRate: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-blue-500 font-mono"
+                  />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Overdue Penalty Charge (₹ / day)</label>
-                  <input type="number" defaultValue="5" className="w-full bg-slate-50 border border-slate-200 text-slate-850 rounded px-2.5 py-1 text-xs focus:outline-none focus:border-blue-500 font-mono" />
+                  <input
+                    type="number"
+                    value={settings.overduePenaltyPerDay}
+                    onChange={(e) => setSettings({ ...settings, overduePenaltyPerDay: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-blue-500 font-mono"
+                  />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Default Grace period (Days)</label>
-                  <input type="number" defaultValue="3" className="w-full bg-slate-50 border border-slate-200 text-slate-850 rounded px-2.5 py-1 text-xs focus:outline-none focus:border-blue-500 font-mono" />
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Default Grace Period (Days)</label>
+                  <input
+                    type="number"
+                    value={settings.gracePeriodDays}
+                    onChange={(e) => setSettings({ ...settings, gracePeriodDays: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-blue-500 font-mono"
+                  />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">SMS / WhatsApp Gateway integration</label>
-                  <select className="w-full bg-slate-50 border border-slate-200 text-slate-850 rounded px-2.5 py-1 text-xs focus:outline-none focus:border-blue-500">
-                    <option>Simulated Developer Console</option>
-                    <option>Twilio Global SMS API</option>
-                    <option>WhatsApp Business API Gateway</option>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">SMS / WhatsApp Dispatch Gateway Integration</label>
+                  <select
+                    value={settings.smsGateway}
+                    onChange={(e) => setSettings({ ...settings, smsGateway: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-blue-500 font-medium"
+                  >
+                    <option value="Simulated Developer Console">Simulated Developer Console</option>
+                    <option value="Twilio Global SMS API">Twilio Global SMS API</option>
+                    <option value="WhatsApp Business API Gateway">WhatsApp Business API Gateway</option>
                   </select>
                 </div>
               </div>
               <button 
-                onClick={() => alert("Global configuration committed successfully.")}
-                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded font-bold text-xs mt-2 shadow-sm transition-colors"
+                type="submit"
+                disabled={settingsSaving}
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded font-bold text-xs mt-2 shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
               >
-                Save configurations
+                {settingsSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                {settingsSaving ? "Saving..." : "Commit Global Configurations"}
               </button>
-            </div>
+            </form>
           )}
 
         </div>

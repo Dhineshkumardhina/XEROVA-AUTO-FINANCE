@@ -30,6 +30,13 @@ router.post("/masters", async (req, res) => {
       ...body,
       id: body.id || `MST-${Date.now().toString().slice(-5)}`
     });
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: new Date().toISOString(),
+      user: "Admin",
+      action: "CREATE_MASTER",
+      details: `Created master directory entity: ${item.name} (${item.category || "dealer"})`
+    });
     res.status(201).json(item);
   } catch (err) {
     res.status(500).json({ error: "Error creating master" });
@@ -39,7 +46,14 @@ router.post("/masters", async (req, res) => {
 router.delete("/masters/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    await MasterModel.findOneAndDelete({ id });
+    const deleted = await MasterModel.findOneAndDelete({ id });
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: new Date().toISOString(),
+      user: "Admin",
+      action: "DELETE_MASTER",
+      details: `Deleted master entity: ${deleted?.name || id}`
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Error deleting master" });
@@ -171,19 +185,83 @@ router.get("/employee/sessions", async (req, res) => {
 
 router.post("/employee/sessions", async (req, res) => {
   try {
-    const { userId, username, loginTime, logoutTime } = req.body;
+    const { userId, name, username, role, loginTime, logoutTime } = req.body;
+    let duration = req.body.duration || null;
+    if (!duration && loginTime && logoutTime) {
+      const diffMins = Math.round((new Date(logoutTime).getTime() - new Date(loginTime).getTime()) / (1000 * 60));
+      if (diffMins > 0) {
+        const hrs = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        duration = hrs > 0 ? `${hrs}h ${mins}m` : `${mins} mins`;
+      } else {
+        duration = "1 min";
+      }
+    }
+
     const session = await EmployeeSessionModel.create({
-      sessionId: `sess-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      ...req.body,
+      id: req.body.id || `sess-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      sessionId: req.body.sessionId || `sess-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       userId: userId || "usr-1",
-      username: username || "staff",
+      name: name || username || "Staff Member",
+      username: username || name || "staff",
+      role: role || "Staff Operator",
       loginTime: loginTime || new Date().toISOString(),
       logoutTime: logoutTime || null,
+      duration,
       status: logoutTime ? "CLOSED" : "ACTIVE",
       ipAddress: req.ip || "127.0.0.1"
     });
+
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: new Date().toISOString(),
+      user: session.name,
+      action: "USER_LOGIN",
+      details: `Shift Attendance Logged: ${session.name} (${session.role}) - ${session.status === "ACTIVE" ? "Continuous On-Shift" : "Completed Shift: " + session.duration}`
+    });
+
     res.status(201).json(session);
   } catch (err) {
+    console.error("[Sessions] Error creating session:", err);
     res.status(500).json({ error: "Error creating employee session record" });
+  }
+});
+
+router.post("/employee/sessions/:id/logout", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const session = await EmployeeSessionModel.findOne({ $or: [{ id }, { sessionId: id }] });
+    if (!session) return res.status(404).json({ error: "Session not found" });
+
+    const now = new Date().toISOString();
+    session.logoutTime = now;
+    session.status = "CLOSED";
+
+    if (session.loginTime) {
+      const diffMins = Math.round((new Date(now).getTime() - new Date(session.loginTime).getTime()) / (1000 * 60));
+      if (diffMins > 0) {
+        const hrs = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        session.duration = hrs > 0 ? `${hrs}h ${mins}m` : `${mins} mins`;
+      } else {
+        session.duration = "1 min";
+      }
+    }
+    await session.save();
+
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: now,
+      user: session.name || session.username || "Staff",
+      action: "USER_LOGOUT",
+      details: `Shift Clocked Out: ${session.name || session.username} (${session.role}). Total Shift Duration: ${session.duration}`
+    });
+
+    res.json(session);
+  } catch (err) {
+    console.error("[Sessions] Error clocking out:", err);
+    res.status(500).json({ error: "Error logging out session" });
   }
 });
 

@@ -225,7 +225,7 @@ router.post("/seized", async (req, res) => {
       if (loan) {
         loan.status = "SEIZED";
         await loan.save();
-        vehicleName = vehicleName || loan.vehicle?.vehicleName || loan.vehicle?.model || "Two Wheeler";
+        vehicleName = vehicleName || loan.vehicle?.vehicleName || (loan.vehicle as any)?.model || "Two Wheeler";
         rcNo = rcNo || loan.vehicle?.rcNo || "TN-PENDING";
         customerName = customerName || loan.customer?.name || "Customer";
         customerPhone = customerPhone || loan.customer?.phone || loan.customer?.mobile || "N/A";

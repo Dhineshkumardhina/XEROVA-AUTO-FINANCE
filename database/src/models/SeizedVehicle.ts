@@ -9,6 +9,7 @@ export interface ISeizedVehicle {
   seizureDate: string;
   godownLocation: string;
   valuationAmount: number;
+  loanBalance?: number;
   status: "IN_YARD" | "RELEASED" | "AUCTIONED" | "WRITTEN_OFF";
   releaseDate?: string;
   releaseRemarks?: string;

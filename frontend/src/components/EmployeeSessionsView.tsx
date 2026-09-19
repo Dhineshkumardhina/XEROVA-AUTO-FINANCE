@@ -174,6 +174,22 @@ export default function EmployeeSessionsView() {
     }
   };
 
+  const handleClockOut = async (id: string) => {
+    try {
+      const res = await fetch(`/api/employee/sessions/${id}/logout`, { method: "POST" });
+      if (res.ok) {
+        fetchSessions();
+        setSuccessMsg("Staff member clocked out successfully.");
+        setTimeout(() => setSuccessMsg(""), 4000);
+      } else {
+        const d = await res.json();
+        setErrorMsg(d.error || "Failed to clock out session.");
+      }
+    } catch (err) {
+      setErrorMsg("Network error clocking out shift session.");
+    }
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -491,10 +507,19 @@ export default function EmployeeSessionsView() {
                       </td>
                       <td className="px-5 py-3.5 text-right">
                         {!sess.logoutTime ? (
-                          <span className="inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-700 px-2 py-0.5 rounded text-[9px] font-bold uppercase font-mono animate-pulse">
-                            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                            Active On-Shift
-                          </span>
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-700 px-2 py-0.5 rounded text-[9px] font-bold uppercase font-mono animate-pulse">
+                              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                              Active On-Shift
+                            </span>
+                            <button
+                              onClick={() => handleClockOut(sess.id)}
+                              className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 px-2 py-1 rounded text-[9px] font-bold font-mono transition-colors cursor-pointer"
+                              title="End staff shift immediately"
+                            >
+                              Clock Out
+                            </button>
+                          </div>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-500 px-2 py-0.5 rounded text-[9px] font-bold uppercase font-mono">
                             Shift Complete
