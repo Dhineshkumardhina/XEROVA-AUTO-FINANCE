@@ -12,4 +12,10 @@ execSync(
   { stdio: "inherit" }
 );
 fs.copyFileSync("api/index.js", "api/[...path].js");
+if (!fs.existsSync("dist/api")) {
+  fs.mkdirSync("dist/api", { recursive: true });
+}
+fs.copyFileSync("api/index.js", "dist/api/index.js");
+fs.copyFileSync("api/[...path].js", "dist/api/[...path].js");
 console.log("[Build] Standalone serverless API bundled successfully!");
+

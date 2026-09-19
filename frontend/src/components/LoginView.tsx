@@ -45,12 +45,12 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password, loginType })
       });
+      const rawText = await res.text();
       let data: any = {};
       try {
-        data = await res.json();
-      } catch (jsonErr) {
-        const text = await res.text().catch(() => "");
-        data = { error: text || `HTTP ${res.status}: ${res.statusText}` };
+        data = JSON.parse(rawText);
+      } catch {
+        data = { error: rawText.length < 200 ? rawText : `Server error (HTTP ${res.status}: ${res.statusText})` };
       }
       if (res.ok && data.success) {
         setTimeout(() => {

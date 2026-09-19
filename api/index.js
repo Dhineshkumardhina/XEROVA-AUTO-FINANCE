@@ -76392,8 +76392,16 @@ async function ensureDB() {
 }
 async function handler(req, res) {
   await ensureDB();
-  if (req.headers && req.headers["x-matched-path"]) {
-    req.url = req.headers["x-matched-path"];
+  console.log(`[Vercel Serverless] ${req.method} ${req.url}`);
+  if (req.url === "/api/index.js" || req.url === "/api/index" || req.url?.includes("[...path]")) {
+    if (req.query && req.query.path) {
+      const p = Array.isArray(req.query.path) ? req.query.path.join("/") : req.query.path;
+      req.url = "/api/" + p.replace(/^\//, "");
+    } else if (req.headers && req.headers["x-original-url"]) {
+      req.url = req.headers["x-original-url"];
+    } else if (req.headers && req.headers["x-forwarded-uri"]) {
+      req.url = req.headers["x-forwarded-uri"];
+    }
   }
   return app_default(req, res);
 }
