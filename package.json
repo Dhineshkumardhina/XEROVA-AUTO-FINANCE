@@ -1,0 +1,44 @@
+{
+  "name": "xerova-auto-finance-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "workspaces": [
+    "frontend",
+    "backend",
+    "database"
+  ],
+  "overrides": {
+    "qs": "^6.16.0",
+    "express": {
+      "qs": "^6.16.0"
+    },
+    "body-parser": {
+      "qs": "^6.16.0"
+    }
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w @xerova/backend\" \"npm run dev -w @xerova/frontend\"",
+    "dev:backend": "npm run dev -w @xerova/backend",
+    "dev:frontend": "npm run dev -w @xerova/frontend",
+    "seed": "npm run seed -w @xerova/database",
+    "build": "npm run build -w @xerova/database && npm run build -w @xerova/backend && npm run build -w @xerova/frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "rollup": "^4.34.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.34.0",
+    "@rollup/rollup-linux-x64-musl": "^4.34.0",
+    "@rollup/rollup-win32-x64-msvc": "^4.34.0",
+    "@tailwindcss/oxide-linux-x64-gnu": "^4.0.0",
+    "@tailwindcss/oxide-linux-x64-musl": "^4.0.0",
+    "lightningcss-linux-x64-gnu": "^1.29.0",
+    "lightningcss-linux-x64-musl": "^1.29.0"
+  }
+}
