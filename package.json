@@ -24,7 +24,8 @@
     "dev:backend": "npm run dev -w @xerova/backend",
     "dev:frontend": "npm run dev -w @xerova/frontend",
     "seed": "npm run seed -w @xerova/database",
-    "build": "npm run build -w @xerova/database && npm run build -w @xerova/backend && npm run build -w @xerova/frontend"
+    "build": "npm run build -w @xerova/database && npm run build -w @xerova/backend && npm run build -w @xerova/frontend",
+    "vercel-build": "npm run build -w @xerova/database && npm run build -w @xerova/backend && npm run build -w @xerova/frontend"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

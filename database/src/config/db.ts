@@ -63,9 +63,11 @@ export async function connectDB(): Promise<void> {
   if (connectionString) {
     try {
       console.log(`[PostgreSQL] Connecting to PostgreSQL database at ${connectionString.split("@")[1] || "configured URI"}...`);
+      const isSslNeeded = connectionString.includes("ssl") || connectionString.includes("neon.tech") || connectionString.includes("supabase.co") || connectionString.includes("pooler");
       pgPool = new Pool({
         connectionString,
-        connectionTimeoutMillis: 5000
+        ssl: isSslNeeded ? { rejectUnauthorized: false } : undefined,
+        connectionTimeoutMillis: 10000
       });
       // Test connection
       await pgPool.query("SELECT 1");
@@ -75,9 +77,6 @@ export async function connectDB(): Promise<void> {
       return;
     } catch (error) {
       console.warn(`[PostgreSQL] Primary connection failed: ${(error as Error).message}`);
-      if (process.env.VERCEL || process.env.NODE_ENV === "production") {
-        throw error;
-      }
       pgPool = null;
     }
   }

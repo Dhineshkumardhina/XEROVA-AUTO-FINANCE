@@ -33,7 +33,14 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== "production") {
+    if (
+      !origin || 
+      allowedOrigins.indexOf(origin) !== -1 || 
+      origin.includes("vercel.app") || 
+      origin.includes("localhost") ||
+      origin.includes("127.0.0.1") ||
+      process.env.NODE_ENV !== "production"
+    ) {
       callback(null, true);
     } else {
       callback(new Error("CORS policy violation: origin not allowed"));
@@ -110,7 +117,7 @@ app.use(async (req, res, next) => {
   next();
 });
 
-// Mount Routes
+// Mount Routes (with /api prefix and root prefix for serverless compatibility)
 app.use("/api/auth", authRoutes);
 app.use("/api/loans", loanRoutes);
 app.use("/api/receipts", receiptRoutes);
@@ -119,6 +126,15 @@ app.use("/api/consultancies", consultancyRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api", masterRoutes);
 app.use("/api", financeRoutes);
+
+app.use("/auth", authRoutes);
+app.use("/loans", loanRoutes);
+app.use("/receipts", receiptRoutes);
+app.use("/preloans", preloanRoutes);
+app.use("/consultancies", consultancyRoutes);
+app.use("/ai", aiRoutes);
+app.use("/", masterRoutes);
+app.use("/", financeRoutes);
 
 // Root & Health check endpoints
 app.get("/", (req, res) => {
