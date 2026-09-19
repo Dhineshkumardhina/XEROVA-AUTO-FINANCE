@@ -45,8 +45,14 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password, loginType })
       });
-      const data = await res.json();
-      if (res.ok) {
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        const text = await res.text().catch(() => "");
+        data = { error: text || `HTTP ${res.status}: ${res.statusText}` };
+      }
+      if (res.ok && data.success) {
         setTimeout(() => {
           onLoginSuccess(data.user, data.sessionId || "");
           setIsLoading(false);
@@ -57,8 +63,8 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
         setIsLoading(false);
         setTimeout(() => setShake(false), 500);
       }
-    } catch (err) {
-      setAuthError("Network communication error with underwriter node.");
+    } catch (err: any) {
+      setAuthError(err.message || "Network communication error with underwriter node.");
       setShake(true);
       setIsLoading(false);
       setTimeout(() => setShake(false), 500);

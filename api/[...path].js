@@ -76392,6 +76392,13 @@ async function ensureDB() {
 }
 async function handler(req, res) {
   await ensureDB();
+  const matchedPath = req.headers["x-matched-path"] || req.headers["x-now-route-matches"];
+  if (matchedPath && typeof matchedPath === "string" && matchedPath.startsWith("/api")) {
+    req.url = matchedPath;
+  } else if (req.query && req.query.path) {
+    const p = Array.isArray(req.query.path) ? req.query.path.join("/") : req.query.path;
+    req.url = "/api/" + p;
+  }
   return app_default(req, res);
 }
 /*! Bundled license information:
