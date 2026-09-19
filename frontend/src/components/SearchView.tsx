@@ -9,10 +9,11 @@ import { LoanStatus } from "../types.js";
 
 interface SearchViewProps {
   onViewLoan: (loanNo: string) => void;
+  initialQuery?: string;
 }
 
-export default function SearchView({ onViewLoan }: SearchViewProps) {
-  const [query, setQuery] = useState("");
+export default function SearchView({ onViewLoan, initialQuery }: SearchViewProps) {
+  const [query, setQuery] = useState(initialQuery || "");
   const [results, setResults] = useState<any>({ loans: [], preloans: [] });
   const [loading, setLoading] = useState(false);
 
@@ -47,8 +48,13 @@ export default function SearchView({ onViewLoan }: SearchViewProps) {
 
   useEffect(() => {
     fetchMasters();
-    handleSearch();
-  }, []);
+    if (initialQuery !== undefined && initialQuery !== query) {
+      setQuery(initialQuery);
+      handleSearch(initialQuery);
+    } else {
+      handleSearch();
+    }
+  }, [initialQuery]);
 
   const fetchMasters = async () => {
     try {
@@ -61,10 +67,11 @@ export default function SearchView({ onViewLoan }: SearchViewProps) {
     }
   };
 
-  const handleSearch = async () => {
+  const handleSearch = async (overrideQuery?: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      const q = typeof overrideQuery === "string" ? overrideQuery : query;
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
       const data = await res.json();
 
       let filteredLoans = data.loans || [];

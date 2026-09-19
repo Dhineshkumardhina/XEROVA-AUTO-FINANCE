@@ -512,8 +512,13 @@ export function HLPaymentView() {
 // ============================================================================
 // 4. PENDING LISTS VIEW
 // ============================================================================
-export function PendingListView() {
-  const [items, setItems] = useState([
+interface PendingListViewProps {
+  onViewLoan?: (loanNo: string) => void;
+  onCollect?: (loanNo: string) => void;
+}
+
+export function PendingListView({ onViewLoan, onCollect }: PendingListViewProps = {}) {
+  const [items, setItems] = useState<any[]>([
     { id: 1, type: "RC_BOOK", desc: "Original Smart Card RC pending collection from showroom dealer", party: "Thangavel M", loanNo: "TN23-HFL-8104", age: "12 Days overdue", severity: "HIGH" },
     { id: 2, type: "STENCIL", desc: "Physical yard chassis/engine pencil stencils missing from folder", party: "Murugan S", loanNo: "TN23-HFL-9041", age: "3 Days overdue", severity: "MEDIUM" },
     { id: 3, type: "GPS_ALERT", desc: "GPS tracking device coordinates transmission silent for 48 hours", party: "Ganesh Babu", loanNo: "TN23-HFL-2305", age: "Emergency alert", severity: "CRITICAL" },
@@ -524,6 +529,46 @@ export function PendingListView() {
   const [filterType, setFilterType] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState("severity");
+
+  useEffect(() => {
+    fetchOverdueLoans();
+  }, []);
+
+  const fetchOverdueLoans = async () => {
+    try {
+      const res = await fetch("/api/loans");
+      if (!res.ok) return;
+      const loans = await res.json();
+      const today = new Date().toISOString().split("T")[0];
+      const overdueFromLoans: any[] = [];
+      
+      loans.forEach((l: any, i: number) => {
+        if (l.status === "ACTIVE" || l.status === "SEIZED") {
+          const overdueInsts = (l.installments || []).filter((inst: any) => inst.status !== "PAID" && inst.dueDate < today);
+          const totalOverdue = overdueInsts.reduce((sum: number, inst: any) => sum + (Number(inst.emiAmount) - Number(inst.paidAmount || 0)), 0);
+          
+          if (overdueInsts.length > 0 || l.status === "SEIZED" || (l.pendingAmount > 0 && l.installments?.length > 0)) {
+            overdueFromLoans.push({
+              id: 100 + i,
+              type: l.status === "SEIZED" ? "SEIZED_ASSET" : "OVERDUE_EMI",
+              desc: `${overdueInsts.length > 0 ? `${overdueInsts.length} EMI installment(s) past due date.` : "Active account with pending balance."} Outstanding balance: ₹${(l.pendingAmount || totalOverdue).toLocaleString()}. Vehicle: ${l.vehicle?.vehicleName || "Vehicle"} (${l.vehicle?.rcNo || "N/A"})`,
+              party: l.customer?.name || "Customer",
+              loanNo: l.loanNo,
+              age: overdueInsts.length > 0 ? `${overdueInsts.length} EMI due` : "Active Ledger",
+              severity: l.status === "SEIZED" || overdueInsts.length >= 3 ? "CRITICAL" : overdueInsts.length >= 2 ? "HIGH" : "MEDIUM",
+              isRealLoan: true
+            });
+          }
+        }
+      });
+      
+      if (overdueFromLoans.length > 0) {
+        setItems(prev => [...overdueFromLoans, ...prev.filter(p => !p.isRealLoan)]);
+      }
+    } catch (e) {
+      console.error("Error loading overdue loans:", e);
+    }
+  };
 
   const handleDismiss = (id: number) => {
     setItems(items.filter(it => it.id !== id));
@@ -558,9 +603,9 @@ export function PendingListView() {
         <div>
           <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
             <AlertTriangle className="h-4.5 w-4.5 text-rose-500 animate-bounce" />
-            Branch Operations Pending Compliance Checklist
+            Branch Operations & Overdue Debt Checklist
           </h3>
-          <p className="text-[10px] text-slate-400 mt-0.5">Real-time compilation of delinquent files, missing physical documents, or yard stencils requiring field enforcement.</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Real-time compilation of delinquent accounts, pending compliance files, missing physical documents, or yard stencils requiring field enforcement.</p>
         </div>
         <div className="flex gap-2">
           <span className="text-[10px] bg-rose-50 border border-rose-200 text-rose-600 font-bold px-2 py-1 rounded font-mono">
@@ -572,7 +617,7 @@ export function PendingListView() {
       {/* Smart Filters Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
         <div className="flex flex-wrap gap-1.5">
-          {["ALL", "RC_BOOK", "STENCIL", "GPS_ALERT", "LOAN_BIND", "INSURANCE"].map(t => (
+          {["ALL", "OVERDUE_EMI", "SEIZED_ASSET", "RC_BOOK", "STENCIL", "GPS_ALERT", "LOAN_BIND", "INSURANCE"].map(t => (
             <button
               key={t}
               onClick={() => setFilterType(t)}
@@ -622,8 +667,10 @@ export function PendingListView() {
 
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className={`px-2 py-0.2 rounded font-bold text-[8.5px] uppercase font-mono border ${
-                  it.type === "GPS_ALERT" ? "bg-red-50 text-red-700 border-red-200 animate-pulse" :
+                <span className={`px-2 py-0.5 rounded font-bold text-[8.5px] uppercase font-mono border ${
+                  it.type === "OVERDUE_EMI" ? "bg-rose-50 text-rose-700 border-rose-200 font-bold" :
+                  it.type === "SEIZED_ASSET" ? "bg-red-50 text-red-800 border-red-200 font-bold" :
+                  it.type === "GPS_ALERT" ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse" :
                   it.type === "RC_BOOK" ? "bg-blue-50 text-blue-700 border-blue-200" :
                   it.type === "STENCIL" ? "bg-amber-50 text-amber-700 border-amber-200" :
                   "bg-slate-100 text-slate-600"
@@ -634,7 +681,7 @@ export function PendingListView() {
               </div>
               <div>
                 <h4 className="font-bold text-slate-800 text-[11.5px]">{it.party}</h4>
-                <p className="text-[10px] text-slate-400 font-mono font-bold leading-none mt-0.5">{it.loanNo}</p>
+                <p className="text-[10px] text-indigo-600 font-mono font-bold leading-none mt-0.5">{it.loanNo}</p>
               </div>
               <p className="text-slate-600 leading-relaxed font-semibold text-[11px]">{it.desc}</p>
             </div>
@@ -646,13 +693,34 @@ export function PendingListView() {
               }`}>
                 {it.severity}
               </span>
-              <button 
-                onClick={() => handleDismiss(it.id)}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] py-1 px-3 rounded transition-colors cursor-pointer flex items-center gap-1"
-              >
-                <Check className="h-3 w-3" />
-                Resolve compliance
-              </button>
+              
+              <div className="flex items-center gap-1.5">
+                {it.isRealLoan && onViewLoan && (
+                  <button 
+                    onClick={() => onViewLoan(it.loanNo)}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] py-1 px-2 rounded transition-colors cursor-pointer"
+                  >
+                    View Ledger
+                  </button>
+                )}
+                {it.isRealLoan && onCollect && (
+                  <button 
+                    onClick={() => onCollect(it.loanNo)}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] py-1 px-2.5 rounded transition-colors cursor-pointer"
+                  >
+                    Collect
+                  </button>
+                )}
+                {!it.isRealLoan && (
+                  <button 
+                    onClick={() => handleDismiss(it.id)}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] py-1 px-3 rounded transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Check className="h-3 w-3" />
+                    Resolve
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}

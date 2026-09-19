@@ -6,22 +6,21 @@
 import React, { useState, useEffect } from "react";
 import { 
   TrendingUp, Users, ShieldAlert, Wallet, Banknote, Briefcase, 
-  Calendar, Calculator, Search, Printer, ArrowUpRight, ArrowDownRight, 
-  AlertCircle, ChevronRight, CheckCircle2, RefreshCw, FileText, 
-  Clock, Building, PlusCircle, Sparkles, Activity, Layers,
-  CreditCard, PieChart as PieIcon, ArrowRight, CheckCircle
+  Calculator, Search, Printer, AlertCircle, CheckCircle2, RefreshCw, FileText, 
+  Clock, Building, PlusCircle, Activity, Layers, ArrowRight, CheckCircle
 } from "lucide-react";
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
 
 interface DashboardViewProps {
   onNavigate: (tab: string) => void;
   onSetReprintNo: (no: string) => void;
+  onSearchCustomer?: (query: string) => void;
 }
 
-export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardViewProps) {
-  const [activeCompany, setActiveCompany] = useState<"XEROVA" | "MURUGAN" | "TRICHY" | "LAKSHA">("XEROVA");
+export default function DashboardView({ onNavigate, onSetReprintNo, onSearchCustomer }: DashboardViewProps) {
+  const [activeCompany, setActiveCompany] = useState<"ALL" | "XEROVA" | "MURUGAN" | "TRICHY" | "LAKSHA">("ALL");
   const [loading, setLoading] = useState(true);
 
   // Real stats state initialized cleanly
@@ -43,22 +42,35 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
 
   const [chartData, setChartData] = useState<any[]>([]);
 
-  // Search states
-  const [searchHPL, setSearchHPL] = useState("");
-  const [searchVehicleNo, setSearchVehicleNo] = useState("");
-  const [searchName, setSearchName] = useState("");
-
   // EMI Calculator states
-  const [emiAmount, setEmiAmount] = useState<number>(100000);
-  const [emiRate, setEmiRate] = useState<number>(12);
-  const [emiMonths, setEmiMonths] = useState<number>(12);
+  const [emiAmount, setEmiAmount] = useState<number | string>(100000);
+  const [emiRate, setEmiRate] = useState<number | string>(14);
+  const [emiMonths, setEmiMonths] = useState<number | string>(12);
 
-  // Quick Reprint state
+  // Quick Action states
   const [quickReprintNo, setQuickReprintNo] = useState("");
+  const [quickSearchTerm, setQuickSearchTerm] = useState("");
 
   useEffect(() => {
     fetchStats();
   }, [activeCompany]);
+
+  const isLoanOnDate = (l: any, targetDate: string) => {
+    return (
+      (l.disbursementDate && l.disbursementDate.startsWith(targetDate)) ||
+      (l.hpDate && l.hpDate.startsWith(targetDate)) ||
+      (l.createdAt && l.createdAt.startsWith(targetDate)) ||
+      (l.date && l.date.startsWith(targetDate))
+    );
+  };
+
+  const isReceiptOnDate = (r: any, targetDate: string) => {
+    return (
+      (r.date && r.date.startsWith(targetDate)) ||
+      (r.timestamp && r.timestamp.startsWith(targetDate)) ||
+      (r.createdAt && r.createdAt.startsWith(targetDate))
+    );
+  };
 
   const generateLast7DaysChart = (loans: any[], receipts: any[]) => {
     const days = [];
@@ -67,17 +79,13 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(today.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = d.toLocaleDateString("en-CA");
       const dayLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
       
-      const dayReceipts = receipts.filter((r: any) => 
-        r.date === dateStr || (r.timestamp && r.timestamp.startsWith(dateStr))
-      );
+      const dayReceipts = receipts.filter((r: any) => isReceiptOnDate(r, dateStr));
       const collectionSum = dayReceipts.reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
       
-      const dayLoans = loans.filter((l: any) => 
-        l.hpDate === dateStr || (l.createdAt && l.createdAt.startsWith(dateStr))
-      );
+      const dayLoans = loans.filter((l: any) => isLoanOnDate(l, dateStr));
       const loanSum = dayLoans.reduce((sum: number, l: any) => sum + (Number(l.loanAmount) || 0), 0);
 
       days.push({
@@ -100,29 +108,55 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
         fetch("/api/audit-logs")
       ]);
 
-      const loans = loansRes.ok ? await loansRes.json() : [];
-      const receipts = receiptsRes.ok ? await receiptsRes.json() : [];
-      const deposits = depositsRes.ok ? await depositsRes.json() : [];
+      const allLoans = loansRes.ok ? await loansRes.json() : [];
+      const allReceipts = receiptsRes.ok ? await receiptsRes.json() : [];
+      const allDeposits = depositsRes.ok ? await depositsRes.json() : [];
       const logs = logsRes.ok ? await logsRes.json() : [];
+
+      // Map loan numbers to their company branch
+      const loanCompanyMap = new Map<string, string>();
+      allLoans.forEach((l: any) => {
+        loanCompanyMap.set(l.loanNo, (l.companyName || "XEROVA").toUpperCase());
+      });
+
+      // Filter by activeCompany
+      const loans = allLoans.filter((l: any) => {
+        if (activeCompany === "ALL") return true;
+        const comp = (l.companyName || "XEROVA").toUpperCase();
+        return comp.includes(activeCompany);
+      });
+
+      const receipts = allReceipts.filter((r: any) => {
+        if (activeCompany === "ALL") return true;
+        const comp = (r.companyName || loanCompanyMap.get(r.loanNo) || "XEROVA").toUpperCase();
+        return comp.includes(activeCompany);
+      });
+
+      const deposits = allDeposits.filter((d: any) => {
+        if (activeCompany === "ALL") return true;
+        const comp = (d.companyName || "XEROVA").toUpperCase();
+        return comp.includes(activeCompany);
+      });
 
       const active = loans.filter((l: any) => l.status === "ACTIVE" || !l.status).length;
       const closed = loans.filter((l: any) => l.status === "CLOSED").length;
       const seized = loans.filter((l: any) => l.status === "SEIZED").length;
 
+      // Outstanding principal calculates true remaining balance
       const activePrincipal = loans
         .filter((l: any) => l.status === "ACTIVE" || !l.status)
-        .reduce((sum: number, l: any) => sum + (Number(l.loanAmount) || 0), 0);
+        .reduce((sum: number, l: any) => {
+          const bal = l.pendingAmount !== undefined && l.pendingAmount !== null ? Number(l.pendingAmount) : Number(l.loanAmount);
+          return sum + (bal || 0);
+        }, 0);
 
-      const todayStr = new Date().toISOString().split("T")[0];
+      const todayStr = new Date().toLocaleDateString("en-CA");
       
-      const todayReceipts = receipts.filter((r: any) => 
-        r.date === todayStr || (r.timestamp && r.timestamp.startsWith(todayStr))
-      );
+      const todayReceipts = receipts.filter((r: any) => isReceiptOnDate(r, todayStr));
       const todayReceiptsSum = todayReceipts.reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
+      const todayPenaltySum = todayReceipts.reduce((sum: number, r: any) => sum + (Number(r.penaltyCollected) || 0), 0);
       
-      const todayLoans = loans.filter((l: any) => 
-        l.hpDate === todayStr || (l.createdAt && l.createdAt.startsWith(todayStr))
-      );
+      const todayLoans = loans.filter((l: any) => isLoanOnDate(l, todayStr));
       const todayLoansSum = todayLoans.reduce((sum: number, l: any) => sum + (Number(l.loanAmount) || 0), 0);
 
       const totalReceiptsSum = receipts.reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
@@ -139,9 +173,9 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
         todayLoanCount: todayLoans.length,
         todayCollectionAmount: todayReceiptsSum,
         todayReceiptCount: todayReceipts.length,
-        todayInterestIncome: Math.round(todayReceiptsSum * 0.15),
+        todayInterestIncome: Math.round(todayReceiptsSum * 0.15) + todayPenaltySum,
         totalProfit: Math.round(totalReceiptsSum * 0.12),
-        activities: logs.slice(0, 6)
+        activities: Array.isArray(logs) ? logs.slice(0, 6) : []
       });
 
       setChartData(generateLast7DaysChart(loans, receipts));
@@ -152,15 +186,33 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
     }
   };
 
-  // Common Search action
-  const handleCommonSearch = () => {
-    onNavigate("search");
+  // Actions
+  const handleQuickReprint = () => {
+    if (quickReprintNo.trim()) {
+      onSetReprintNo(quickReprintNo.trim());
+      onNavigate("transactions");
+    }
   };
 
-  // EMI Calculations
-  const calcInterest = (emiAmount * (emiRate / 100) * emiMonths) / 12;
-  const calcTotalPayable = emiAmount + calcInterest;
-  const calcMonthlyEMI = emiMonths > 0 ? Math.round(calcTotalPayable / emiMonths) : 0;
+  const handleCustomerSearch = () => {
+    if (quickSearchTerm.trim()) {
+      if (onSearchCustomer) {
+        onSearchCustomer(quickSearchTerm.trim());
+      } else {
+        onNavigate("search");
+      }
+    } else {
+      onNavigate("search");
+    }
+  };
+
+  // EMI Calculations with safe type coercion
+  const numAmount = Math.max(0, Number(emiAmount) || 0);
+  const numRate = Math.max(0, Number(emiRate) || 0);
+  const numMonths = Math.max(0, Number(emiMonths) || 0);
+  const calcInterest = (numAmount * (numRate / 100) * numMonths) / 12;
+  const calcTotalPayable = numAmount + calcInterest;
+  const calcMonthlyEMI = numMonths > 0 ? Math.round(calcTotalPayable / numMonths) : 0;
 
   return (
     <div className="space-y-5 font-sans text-xs pb-6">
@@ -186,7 +238,7 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
         {/* Branch / Entity Tabs & Refresh */}
         <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
           <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
-            {(["XEROVA", "MURUGAN", "TRICHY", "LAKSHA"] as const).map((branch) => (
+            {(["ALL", "XEROVA", "MURUGAN", "TRICHY", "LAKSHA"] as const).map((branch) => (
               <button 
                 key={branch}
                 onClick={() => setActiveCompany(branch)}
@@ -196,7 +248,7 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
                     : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
                 }`}
               >
-                {branch === "XEROVA" ? "XEROVA Auto" : branch}
+                {branch === "ALL" ? "All Branches" : branch === "XEROVA" ? "XEROVA Auto" : branch}
               </button>
             ))}
           </div>
@@ -211,15 +263,19 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
         </div>
       </div>
 
-      {/* CORE HERO FINANCIAL KPIS (4 High-Impact Cards) */}
+      {/* CORE HERO FINANCIAL KPIS (4 High-Impact Interactive Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         {/* Active Portfolio */}
-        <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+        <div 
+          onClick={() => onNavigate("search")}
+          className="bg-white border border-slate-200/80 hover:border-indigo-400 rounded-xl p-4 shadow-sm hover:shadow-md transition-all relative overflow-hidden group cursor-pointer"
+          title="Click to view all accounts in Search"
+        >
           <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-full blur-xl group-hover:bg-indigo-100/50 transition-colors"></div>
           <div className="flex items-center justify-between relative z-10">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">Active Loans Portfolio</span>
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
               <FileText className="h-4 w-4" />
             </div>
           </div>
@@ -233,11 +289,15 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
         </div>
 
         {/* Today's Collections */}
-        <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+        <div 
+          onClick={() => onNavigate("transactions")}
+          className="bg-white border border-slate-200/80 hover:border-emerald-400 rounded-xl p-4 shadow-sm hover:shadow-md transition-all relative overflow-hidden group cursor-pointer"
+          title="Click to view Transactions"
+        >
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50/50 rounded-full blur-xl group-hover:bg-emerald-100/50 transition-colors"></div>
           <div className="flex items-center justify-between relative z-10">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">Today's Collections</span>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-colors">
               <TrendingUp className="h-4 w-4" />
             </div>
           </div>
@@ -251,11 +311,15 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
         </div>
 
         {/* Today's Disbursements */}
-        <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+        <div 
+          onClick={() => onNavigate("pre_loan")}
+          className="bg-white border border-slate-200/80 hover:border-amber-400 rounded-xl p-4 shadow-sm hover:shadow-md transition-all relative overflow-hidden group cursor-pointer"
+          title="Click to create a New Pre-Loan"
+        >
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50/50 rounded-full blur-xl group-hover:bg-amber-100/50 transition-colors"></div>
           <div className="flex items-center justify-between relative z-10">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">Today's Disbursements</span>
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg group-hover:bg-amber-600 group-hover:text-white transition-colors">
               <Banknote className="h-4 w-4" />
             </div>
           </div>
@@ -269,11 +333,15 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
         </div>
 
         {/* Liquid Cash in Hand */}
-        <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+        <div 
+          onClick={() => onNavigate("transactions")}
+          className="bg-white border border-slate-200/80 hover:border-blue-400 rounded-xl p-4 shadow-sm hover:shadow-md transition-all relative overflow-hidden group cursor-pointer"
+          title="Click to view Cash Transactions"
+        >
           <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50/50 rounded-full blur-xl group-hover:bg-blue-100/50 transition-colors"></div>
           <div className="flex items-center justify-between relative z-10">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">Liquid Cash In Hand</span>
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
               <Wallet className="h-4 w-4" />
             </div>
           </div>
@@ -290,7 +358,11 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
 
       {/* SECONDARY METRICS STRIP */}
       <div className="bg-slate-50/80 border border-slate-200/60 rounded-xl p-3.5 grid grid-cols-2 sm:grid-cols-4 gap-3 select-none">
-        <div className="bg-white p-3 rounded-lg border border-slate-200/70 flex items-center justify-between">
+        <div 
+          onClick={() => onNavigate("search")}
+          className="bg-white p-3 rounded-lg border border-slate-200/70 hover:border-emerald-300 flex items-center justify-between cursor-pointer transition-colors shadow-xs"
+          title="Click to view in Accounts Search"
+        >
           <div>
             <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider font-mono">Closed Loans</span>
             <p className="text-base font-black text-slate-800 font-mono mt-0.5">{stats.closedLoans}</p>
@@ -298,7 +370,11 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
           <CheckCircle2 className="h-5 w-5 text-emerald-500/70" />
         </div>
 
-        <div className="bg-white p-3 rounded-lg border border-slate-200/70 flex items-center justify-between">
+        <div 
+          onClick={() => onNavigate("seized")}
+          className="bg-white p-3 rounded-lg border border-slate-200/70 hover:border-rose-300 flex items-center justify-between cursor-pointer transition-colors shadow-xs"
+          title="Click to view Seized Vehicles"
+        >
           <div>
             <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider font-mono">Seized Accounts</span>
             <p className="text-base font-black text-rose-600 font-mono mt-0.5">{stats.seizedLoans}</p>
@@ -306,7 +382,11 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
           <ShieldAlert className="h-5 w-5 text-rose-400/70" />
         </div>
 
-        <div className="bg-white p-3 rounded-lg border border-slate-200/70 flex items-center justify-between">
+        <div 
+          onClick={() => onNavigate("deposits_view")}
+          className="bg-white p-3 rounded-lg border border-slate-200/70 hover:border-indigo-300 flex items-center justify-between cursor-pointer transition-colors shadow-xs"
+          title="Click to view Fixed Deposits"
+        >
           <div>
             <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider font-mono">Active Fixed Deposits</span>
             <p className="text-base font-black text-slate-800 font-mono mt-0.5">{stats.activeFDs}</p>
@@ -314,7 +394,7 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
           <Briefcase className="h-5 w-5 text-indigo-400/70" />
         </div>
 
-        <div className="bg-white p-3 rounded-lg border border-slate-200/70 flex items-center justify-between">
+        <div className="bg-white p-3 rounded-lg border border-slate-200/70 flex items-center justify-between shadow-xs">
           <div>
             <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider font-mono">Est. Interest Income</span>
             <p className="text-base font-black text-emerald-700 font-mono mt-0.5">₹{stats.todayInterestIncome.toLocaleString()}</p>
@@ -372,7 +452,7 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
 
           <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
             <span>Chart automatically aggregates real-time loan receipts & disbursements.</span>
-            <span className="font-mono text-slate-500">Updated: Today</span>
+            <span className="font-mono text-slate-500">Live DB Connected</span>
           </div>
         </div>
 
@@ -395,7 +475,8 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
                 <input 
                   type="number" 
                   value={emiAmount}
-                  onChange={(e) => setEmiAmount(Number(e.target.value))}
+                  onChange={(e) => setEmiAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="e.g. 100000"
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-mono transition-all"
                 />
               </div>
@@ -406,7 +487,8 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
                   <input 
                     type="number" 
                     value={emiRate}
-                    onChange={(e) => setEmiRate(Number(e.target.value))}
+                    onChange={(e) => setEmiRate(e.target.value === "" ? "" : Number(e.target.value))}
+                    placeholder="e.g. 14"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-mono transition-all"
                   />
                 </div>
@@ -415,7 +497,8 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
                   <input 
                     type="number" 
                     value={emiMonths}
-                    onChange={(e) => setEmiMonths(Number(e.target.value))}
+                    onChange={(e) => setEmiMonths(e.target.value === "" ? "" : Number(e.target.value))}
+                    placeholder="e.g. 12"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-mono transition-all"
                   />
                 </div>
@@ -439,7 +522,15 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
             </div>
           </div>
 
-          <p className="text-[9px] text-slate-400 text-center mt-3">Calculated using flat interest schedule for vehicle loans.</p>
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+            <p className="text-[9px] text-slate-400">Flat interest vehicle rate</p>
+            <button 
+              onClick={() => onNavigate("pre_loan")}
+              className="text-[10px] text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              Apply to Pre-Loan <ArrowRight className="h-3 w-3" />
+            </button>
+          </div>
         </div>
 
       </div>
@@ -458,7 +549,7 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
             <div className="grid grid-cols-2 gap-2.5">
               <button 
                 onClick={() => onNavigate("pre_loan")}
-                className="p-3 bg-slate-50 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 rounded-xl text-left transition-all group cursor-pointer"
+                className="p-3 bg-slate-50 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 rounded-xl text-left transition-all group cursor-pointer shadow-2xs"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-slate-800 group-hover:text-indigo-700 text-xs">New Pre-Loan</span>
@@ -469,7 +560,7 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
 
               <button 
                 onClick={() => onNavigate("ledger_entry")}
-                className="p-3 bg-slate-50 border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 rounded-xl text-left transition-all group cursor-pointer"
+                className="p-3 bg-slate-50 border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 rounded-xl text-left transition-all group cursor-pointer shadow-2xs"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-slate-800 group-hover:text-emerald-700 text-xs">Post Collection</span>
@@ -480,7 +571,7 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
 
               <button 
                 onClick={() => onNavigate("search")}
-                className="p-3 bg-slate-50 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 rounded-xl text-left transition-all group cursor-pointer"
+                className="p-3 bg-slate-50 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 rounded-xl text-left transition-all group cursor-pointer shadow-2xs"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-slate-800 group-hover:text-indigo-700 text-xs">Search Accounts</span>
@@ -491,7 +582,7 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
 
               <button 
                 onClick={() => onNavigate("transactions")}
-                className="p-3 bg-slate-50 border border-slate-200 hover:border-amber-400 hover:bg-amber-50/50 rounded-xl text-left transition-all group cursor-pointer"
+                className="p-3 bg-slate-50 border border-slate-200 hover:border-amber-400 hover:bg-amber-50/50 rounded-xl text-left transition-all group cursor-pointer shadow-2xs"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-slate-800 group-hover:text-amber-700 text-xs">Transactions</span>
@@ -503,7 +594,7 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
           </div>
 
           <div className="pt-3 border-t border-slate-100 text-[10px] text-slate-400 text-center">
-            Superadmin Access Level • Active Node
+            Operational Quick Access • Active Node
           </div>
         </div>
 
@@ -512,7 +603,7 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
           <div>
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
               <Printer className="h-4.5 w-4.5 text-indigo-600" />
-              <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Fast Receipt Reprint</h3>
+              <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Fast Receipt Reprint & Search</h3>
             </div>
 
             <div className="space-y-3">
@@ -521,19 +612,18 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
                 <div className="flex gap-2">
                   <input 
                     type="text" 
-                    placeholder="e.g. RCPT-1001" 
+                    placeholder="e.g. REC-10001" 
                     value={quickReprintNo}
                     onChange={(e) => setQuickReprintNo(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleQuickReprint();
+                    }}
                     className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-bold font-mono focus:outline-none focus:border-indigo-500"
                   />
                   <button 
-                    onClick={() => {
-                      if (quickReprintNo.trim()) {
-                        onSetReprintNo(quickReprintNo.trim());
-                        onNavigate("transactions");
-                      }
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer flex items-center gap-1"
+                    onClick={handleQuickReprint}
+                    disabled={!quickReprintNo.trim()}
+                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer flex items-center gap-1"
                   >
                     <Printer className="h-3.5 w-3.5" />
                     Reprint
@@ -542,13 +632,32 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
               </div>
 
               <div className="pt-2 border-t border-slate-100">
-                <label className="text-[9px] text-slate-500 font-bold uppercase block mb-1.5">Direct Customer Quick Search</label>
+                <label className="text-[9px] text-slate-500 font-bold uppercase block mb-1">Quick Account / Vehicle Search</label>
+                <div className="flex gap-2 mb-2">
+                  <input 
+                    type="text" 
+                    placeholder="e.g. HP-2026 or TN-01 or Name" 
+                    value={quickSearchTerm}
+                    onChange={(e) => setQuickSearchTerm(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCustomerSearch();
+                    }}
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-bold font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                  <button 
+                    onClick={handleCustomerSearch}
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Search className="h-3.5 w-3.5 text-indigo-400" />
+                    Find
+                  </button>
+                </div>
+
                 <button 
-                  onClick={handleCommonSearch}
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 rounded-lg transition-colors text-[11px] tracking-wide cursor-pointer flex items-center justify-center gap-2"
+                  onClick={() => onNavigate("search")}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-1.5 rounded-lg transition-colors text-[10px] tracking-wide cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  <Search className="h-3.5 w-3.5 text-indigo-400" />
-                  Open Global Customer Search
+                  Open Full Filter Search
                 </button>
               </div>
             </div>
@@ -575,17 +684,29 @@ export default function DashboardView({ onNavigate, onSetReprintNo }: DashboardV
                   <p className="text-[11px]">System ready. No audit entries logged yet.</p>
                 </div>
               ) : (
-                stats.activities.map((act: any) => (
-                  <div key={act.id || act._id} className="p-2 bg-slate-50 rounded-lg border border-slate-150 text-[10px]">
-                    <div className="flex justify-between items-center mb-0.5">
-                      <span className="font-bold text-indigo-700 uppercase font-mono">{act.action}</span>
-                      <span className="text-slate-400 text-[9px] font-mono">
-                        {act.timestamp ? new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now"}
-                      </span>
+                stats.activities.map((act: any) => {
+                  const isReceipt = act.action?.includes("RECEIPT");
+                  const isLoan = act.action?.includes("LOAN");
+                  return (
+                    <div key={act.id || act._id} className="p-2 bg-slate-50 rounded-lg border border-slate-150 text-[10px]">
+                      <div className="flex justify-between items-center mb-0.5">
+                        <span className={`font-bold uppercase font-mono px-1.5 py-0.2 rounded text-[9px] ${
+                          isReceipt 
+                            ? "bg-emerald-100 text-emerald-800" 
+                            : isLoan 
+                              ? "bg-indigo-100 text-indigo-800" 
+                              : "bg-slate-200 text-slate-700"
+                        }`}>
+                          {act.action}
+                        </span>
+                        <span className="text-slate-400 text-[9px] font-mono">
+                          {act.timestamp ? new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now"}
+                        </span>
+                      </div>
+                      <p className="text-slate-600 truncate mt-0.5">{act.details || "System action logged"}</p>
                     </div>
-                    <p className="text-slate-600 truncate">{act.details || "System action logged"}</p>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

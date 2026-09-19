@@ -304,283 +304,141 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto scrollbar-thin">
-          {/* Main Controls */}
-          <button 
-            onClick={() => { setCurrentView("dashboard"); setSelectedLoanNo(null); }}
-            className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "dashboard" ? "bg-slate-800 text-white font-semibold" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
-          >
-            <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            Dashboard
-          </button>
-
-          <button 
-            onClick={() => { setCurrentView("search"); setGlobalSearchQuery(""); }}
-            className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "search" ? "bg-slate-800 text-white font-semibold" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
-          >
-            <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            Search
-          </button>
-
-          {/* 1. Pre-Loan Process */}
+        <nav className="flex-1 px-2 py-3 space-y-3 overflow-y-auto scrollbar-thin">
+          {/* Section: OVERVIEW */}
           <div>
-            <button 
-              onClick={() => setPreLoanOpen(!preLoanOpen)}
-              className="w-full flex items-center justify-between px-3 py-1.5 rounded text-xs text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer"
-            >
-              <span className="flex items-center gap-2.5">
-                <FileText className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                Pre-Loan Process
-              </span>
-              {preLoanOpen ? <ChevronDown className="h-3 w-3 text-slate-500" /> : <ChevronRight className="h-3 w-3 text-slate-500" />}
-            </button>
-            {preLoanOpen && (
-              <div className="pl-6 space-y-0.5 mt-0.5">
-                <button 
-                  onClick={() => { setCurrentView("pre_loan"); setPreLoanForceCreate(true); }}
-                  className={`w-full text-left px-3 py-1 rounded text-[11px] transition-colors cursor-pointer ${currentView === "pre_loan" && preLoanForceCreate ? "text-white font-bold bg-slate-800/50" : "text-slate-400 hover:text-white"}`}
-                >
-                  • Create
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("pre_loan"); setPreLoanForceCreate(false); }}
-                  className={`w-full text-left px-3 py-1 rounded text-[11px] transition-colors cursor-pointer ${currentView === "pre_loan" && !preLoanForceCreate ? "text-white font-bold bg-slate-800/50" : "text-slate-400 hover:text-white"}`}
-                >
-                  • View
-                </button>
-              </div>
-            )}
-          </div>
+            <span className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Overview</span>
+            <div className="space-y-0.5">
+              <button 
+                onClick={() => { setCurrentView("dashboard"); setSelectedLoanNo(null); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "dashboard" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
+                Dashboard
+              </button>
 
-          {/* 2. Consultancy */}
-          <div>
-            <button 
-              onClick={() => setConsultancyOpen(!consultancyOpen)}
-              className="w-full flex items-center justify-between px-3 py-1.5 rounded text-xs text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer"
-            >
-              <span className="flex items-center gap-2.5">
-                <Car className="h-3.5 w-3.5 shrink-0 text-blue-400" />
-                Consultancy
-              </span>
-              {consultancyOpen ? <ChevronDown className="h-3 w-3 text-slate-500" /> : <ChevronRight className="h-3 w-3 text-slate-500" />}
-            </button>
-            {consultancyOpen && (
-              <div className="pl-6 space-y-0.5 mt-0.5">
-                <button 
-                  onClick={() => { setCurrentView("consultancy"); setConsultancyTab("purchase"); }}
-                  className={`w-full text-left px-3 py-1 rounded text-[11px] transition-colors cursor-pointer ${currentView === "consultancy" && consultancyTab === "purchase" ? "text-white font-bold bg-slate-800/50" : "text-slate-400 hover:text-white"}`}
-                >
-                  • Purchase Vehicle
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("consultancy"); setConsultancyTab("sales"); }}
-                  className={`w-full text-left px-3 py-1 rounded text-[11px] transition-colors cursor-pointer ${currentView === "consultancy" && consultancyTab === "sales" ? "text-white font-bold bg-slate-800/50" : "text-slate-400 hover:text-white"}`}
-                >
-                  • Sales Vehicle
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("consultancy"); setConsultancyTab("view_sales"); }}
-                  className={`w-full text-left px-3 py-1 rounded text-[11px] transition-colors cursor-pointer ${currentView === "consultancy" && consultancyTab === "view_sales" ? "text-white font-bold bg-slate-800/50" : "text-slate-400 hover:text-white"}`}
-                >
-                  • View Sales Vehicle
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("consultancy"); setConsultancyTab("pending"); }}
-                  className={`w-full text-left px-3 py-1 rounded text-[11px] transition-colors cursor-pointer ${currentView === "consultancy" && consultancyTab === "pending" ? "text-white font-bold bg-slate-800/50" : "text-slate-400 hover:text-white"}`}
-                >
-                  • Pending Vehicle
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* 3. Entry */}
-          <div>
-            <button 
-              onClick={() => setEntryOpen(!entryOpen)}
-              className="w-full flex items-center justify-between px-3 py-1.5 rounded text-xs text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer"
-            >
-              <span className="flex items-center gap-2.5">
-                <BookOpen className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
-                Entry Folder
-              </span>
-              {entryOpen ? <ChevronDown className="h-3 w-3 text-slate-500" /> : <ChevronRight className="h-3 w-3 text-slate-500" />}
-            </button>
-            {entryOpen && (
-              <div className="pl-6 space-y-0.5 mt-0.5 border-l border-slate-800 ml-4">
-                <button 
-                  onClick={() => { setCurrentView("ledger_entry"); setSelectedLoanNo(null); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • HP Ledger (Create)
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("search"); setGlobalSearchQuery(""); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • HP Ledger (View)
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("ledger_entry"); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • Document Detail Entry
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("locator"); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer flex items-center gap-1"
-                >
-                  • Google Locator <span className="text-[8px] bg-indigo-600/50 text-indigo-200 px-1 rounded">Map</span>
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("transactions"); setReprintReceiptNo(null); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • Receipt Create
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("transactions"); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • Re-Print Receipt
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("deposits_view"); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • Deposit
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("binding_loan_view"); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • Binding Loan
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("hl_payment_view"); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • HL Payment & Posting
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("admin"); setAccountsPanel("reports"); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • Voucher
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("seized"); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • Seized Vehicles (Entry)
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("seized"); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • Seized Vehicles (Details)
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("seized"); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • Bad Debts-Police
-                </button>
-                <button 
-                  onClick={() => { setCurrentView("seized"); }}
-                  className="w-full text-left px-3 py-0.5 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • Godown Sale
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Main auxiliary list */}
-          <button 
-            onClick={() => { setCurrentView("admin"); setAccountsPanel("masters"); }}
-            className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "admin" && accountsPanel === "masters" ? "bg-slate-800 text-white font-semibold" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
-          >
-            <Briefcase className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            Master
-          </button>
-
-          <button 
-            onClick={() => { setCurrentView("pending_list_view"); }}
-            className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "pending_list_view" ? "bg-slate-800 text-white font-semibold" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
-          >
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            Pending List
-          </button>
-
-          <button 
-            onClick={() => { setCurrentView("admin"); setAccountsPanel("reports"); }}
-            className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "admin" && accountsPanel === "reports" ? "bg-slate-800 text-white font-semibold" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            Reports
-          </button>
-
-          <button 
-            onClick={() => { setCurrentView("admin"); setAccountsPanel("general"); }}
-            className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "admin" && accountsPanel === "general" ? "bg-slate-800 text-white font-semibold" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
-          >
-            <Coins className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            Accounts
-          </button>
-
-          <button 
-            onClick={() => { setCurrentView("admin"); setAccountsPanel("notices"); }}
-            className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "admin" && accountsPanel === "notices" ? "bg-slate-800 text-white font-semibold" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
-          >
-            <Printer className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            Notice &amp; Print's
-          </button>
-
-          {/* AI Intelligence (Privileged) */}
-          {isAdmin ? (
-            <button 
-              onClick={() => setCurrentView("fraud")}
-              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "fraud" ? "bg-slate-800 text-white font-semibold" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
-            >
-              <Fingerprint className="h-3.5 w-3.5 shrink-0 text-indigo-400 animate-pulse" />
-              AI Fraud Intelligence
-            </button>
-          ) : (
-            <div 
-              className="w-full flex items-center justify-between px-3 py-1.5 rounded text-xs text-slate-600 cursor-not-allowed select-none"
-              title="Admin Privilege Required"
-            >
-              <span className="flex items-center gap-2.5">
-                <Fingerprint className="h-3.5 w-3.5 shrink-0 text-slate-600" />
-                AI Fraud Intel
-              </span>
-              <span className="text-[9px] bg-slate-800 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500 font-mono">LOCK</span>
+              <button 
+                onClick={() => { setCurrentView("search"); setGlobalSearchQuery(""); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "search" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <Search className="h-3.5 w-3.5 shrink-0" />
+                Search &amp; Inquiry
+              </button>
             </div>
-          )}
+          </div>
 
-          {/* Options Section */}
+          {/* Section: LOANS & RECOVERIES */}
           <div>
-            <button 
-              onClick={() => setOptionsOpen(!optionsOpen)}
-              className="w-full flex items-center justify-between px-3 py-1.5 rounded text-xs text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer"
-            >
-              <span className="flex items-center gap-2.5">
-                <Settings className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                Options
-              </span>
-              {optionsOpen ? <ChevronDown className="h-3 w-3 text-slate-500" /> : <ChevronRight className="h-3 w-3 text-slate-500" />}
-            </button>
-            {optionsOpen && (
-              <div className="pl-6 space-y-0.5 mt-0.5">
-                <button 
-                  onClick={() => { setCurrentView("admin"); setAccountsPanel("general"); }}
-                  className="w-full text-left px-3 py-1 rounded text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                >
-                  • Settings
-                </button>
-              </div>
-            )}
+            <span className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Loans &amp; Recovery</span>
+            <div className="space-y-0.5">
+              <button 
+                onClick={() => { setCurrentView("ledger_entry"); setSelectedLoanNo(null); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "ledger_entry" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                HP Loan Ledger
+              </button>
+
+              <button 
+                onClick={() => { setCurrentView("transactions"); setReprintReceiptNo(null); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "transactions" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <Wallet className="h-3.5 w-3.5 shrink-0" />
+                EMI Collections
+              </button>
+
+              <button 
+                onClick={() => { setCurrentView("pre_loan"); setPreLoanForceCreate(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "pre_loan" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                Pre-Loan Proposals
+              </button>
+
+              <button 
+                onClick={() => { setCurrentView("pending_list_view"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "pending_list_view" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                Overdue &amp; Defaulters
+              </button>
+
+              <button 
+                onClick={() => { setCurrentView("seized"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "seized" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+                Seized Yard &amp; Auctions
+              </button>
+            </div>
+          </div>
+
+          {/* Section: FINANCE & ACCOUNTS */}
+          <div>
+            <span className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Finance &amp; Accounts</span>
+            <div className="space-y-0.5">
+              <button 
+                onClick={() => { setCurrentView("deposits_view"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "deposits_view" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <PiggyBank className="h-3.5 w-3.5 shrink-0" />
+                Fixed Deposits
+              </button>
+
+              <button 
+                onClick={() => { setCurrentView("hl_payment_view"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "hl_payment_view" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <Coins className="h-3.5 w-3.5 shrink-0" />
+                Hand Loans &amp; Postings
+              </button>
+
+              <button 
+                onClick={() => { setCurrentView("consultancy"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "consultancy" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <Car className="h-3.5 w-3.5 shrink-0" />
+                Vehicle Consultancy
+              </button>
+            </div>
+          </div>
+
+          {/* Section: ADMINISTRATION */}
+          <div>
+            <span className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Administration</span>
+            <div className="space-y-0.5">
+              <button 
+                onClick={() => { setCurrentView("admin"); setAccountsPanel("masters"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "admin" && accountsPanel === "masters" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <Building2 className="h-3.5 w-3.5 shrink-0" />
+                Sourcing Masters
+              </button>
+
+              <button 
+                onClick={() => { setCurrentView("admin"); setAccountsPanel("general"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "admin" && accountsPanel === "general" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <Settings className="h-3.5 w-3.5 shrink-0" />
+                Settings &amp; Parameters
+              </button>
+
+              <button 
+                onClick={() => { setCurrentView("admin"); setAccountsPanel("reports"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "admin" && accountsPanel === "reports" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+                Audit Logs &amp; Reports
+              </button>
+
+              <button 
+                onClick={() => { setCurrentView("shifts"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "shifts" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                Staff Shift Sessions
+              </button>
+            </div>
           </div>
         </nav>
 
@@ -668,17 +526,9 @@ export default function App() {
                         
                         return (
                           <div key={notif.id} className="p-3.5 hover:bg-slate-50 transition-colors flex gap-3 items-start text-xs text-slate-700">
-                            {/* Rich Visual Image Icon Badge */}
-                            <div className="h-10 w-10 rounded-xl overflow-hidden border border-slate-200 shrink-0 relative bg-slate-100 shadow-xs select-none">
-                              <img 
-                                src={config.image} 
-                                alt={config.title} 
-                                className="h-full w-full object-cover"
-                                referrerPolicy="no-referrer"
-                              />
-                              <div className={`absolute -bottom-1 -right-1 h-4 w-4 rounded-full flex items-center justify-center text-white p-0.5 shadow-sm ${config.color}`}>
-                                <NotificationIcon className="h-2.5 w-2.5" />
-                              </div>
+                            {/* Icon Badge */}
+                            <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 border ${config.bgColor} ${config.textColor} shadow-xs select-none`}>
+                              <NotificationIcon className="h-4.5 w-4.5" />
                             </div>
 
                             <div className="flex-1 min-w-0 space-y-0.5">
@@ -740,17 +590,41 @@ export default function App() {
             {currentView === "dashboard" && (
               <DashboardView 
                 onNavigate={(tab) => {
-                  if (tab === "Transactions") setCurrentView("transactions");
-                  else if (tab === "Search") setCurrentView("search");
+                  const viewMap: Record<string, CurrentView> = {
+                    dashboard: "dashboard",
+                    pre_loan: "pre_loan",
+                    ledger_entry: "ledger_entry",
+                    search: "search",
+                    transactions: "transactions",
+                    consultancy: "consultancy",
+                    seized: "seized",
+                    admin: "admin",
+                    shifts: "shifts",
+                    deposits_view: "deposits_view",
+                    binding_loan_view: "binding_loan_view",
+                    hl_payment_view: "hl_payment_view",
+                    pending_list_view: "pending_list_view",
+                    PreLoan: "pre_loan",
+                    LedgerEntry: "ledger_entry",
+                    Search: "search",
+                    Transactions: "transactions",
+                  };
+                  const target = viewMap[tab] || (tab as CurrentView);
+                  setCurrentView(target);
                 }}
                 onSetReprintNo={(no) => {
                   setReprintReceiptNo(no);
+                }}
+                onSearchCustomer={(q) => {
+                  setGlobalSearchQuery(q);
+                  setCurrentView("search");
                 }}
               />
             )}
 
             {currentView === "search" && (
               <SearchView 
+                initialQuery={globalSearchQuery}
                 onViewLoan={(loanNo) => {
                   setSelectedLoanNo(loanNo);
                   setCurrentView("ledger_entry");
@@ -759,12 +633,27 @@ export default function App() {
             )}
 
             {currentView === "pre_loan" && (
-              <PreLoanView onSuccess={handleSuccessSync} />
+              <PreLoanView 
+                onSuccess={handleSuccessSync} 
+                initialIsCreating={preLoanForceCreate}
+                onOpenLedger={(loanNo) => {
+                  setSelectedLoanNo(loanNo);
+                  setCurrentView("ledger_entry");
+                }}
+              />
             )}
 
             {currentView === "ledger_entry" && (
               <LedgerEntryView 
                 selectedLoanNo={selectedLoanNo}
+                onNavigate={(tab, arg) => {
+                  if (tab === "transactions") {
+                    if (arg) setSelectedLoanNo(arg);
+                    setCurrentView("transactions");
+                  } else if (tab === "seized") {
+                    setCurrentView("seized");
+                  }
+                }}
                 onSuccess={(createdLoanNo) => {
                   if (createdLoanNo) {
                     setSelectedLoanNo(createdLoanNo);
@@ -777,6 +666,7 @@ export default function App() {
             {currentView === "transactions" && (
               <TransactionsView 
                 prefillReprintNo={reprintReceiptNo}
+                prefillLoanNo={selectedLoanNo}
                 onSuccess={() => {
                   setReprintReceiptNo(null);
                   handleSuccessSync();
@@ -789,15 +679,11 @@ export default function App() {
             )}
 
             {currentView === "seized" && (
-              <SeizedVehiclesView />
+              <SeizedVehiclesView onSuccess={handleSuccessSync} />
             )}
 
             {currentView === "admin" && (
               <AccountsSettingsView initialPanel={accountsPanel} />
-            )}
-
-            {currentView === "fraud" && (
-              <FraudDetectionView />
             )}
 
             {currentView === "shifts" && (
@@ -817,87 +703,34 @@ export default function App() {
             )}
 
             {currentView === "pending_list_view" && (
-              <PendingListView />
-            )}
-
-            {currentView === "locator" && (
-              <GoogleLocatorView />
+              <PendingListView 
+                onViewLoan={(loanNo) => {
+                  setSelectedLoanNo(loanNo);
+                  setCurrentView("ledger_entry");
+                }}
+                onCollect={(loanNo) => {
+                  setSelectedLoanNo(loanNo);
+                  setCurrentView("transactions");
+                }}
+              />
             )}
 
           </div>
         </main>
 
         {/* SYSTEM FOOTER */}
-        <footer className="h-8 bg-slate-100 border-t border-slate-200 px-6 flex items-center justify-between text-[10px] text-slate-600 shrink-0 select-none">
+        <footer className="h-8 bg-white border-t border-slate-200 px-6 flex items-center justify-between text-[11px] text-slate-600 shrink-0 select-none">
           <div className="flex items-center gap-4">
-            <span>DB Connect: <span className="text-green-600 font-bold">POSTGRES_LIVE</span></span>
-            <span className="hidden sm:inline">Server Latency: <span className="font-semibold text-slate-700">12ms</span></span>
-            <span className="hidden md:inline">Last Backup: <span className="font-semibold text-slate-700">14:00 Today</span></span>
+            <span className="flex items-center gap-1.5 font-medium text-slate-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+              Database: <strong className="text-slate-900">PostgreSQL (PGlite Online)</strong>
+            </span>
+            <span className="text-slate-300">•</span>
+            <span>Active Branch: <strong className="text-slate-900">{currentBranch}</strong></span>
           </div>
-          <div className="font-mono text-slate-500">v4.8.2-PRO • ROLE-BASED STAFF SESSION</div>
+          <div className="text-slate-500 font-medium">XEROVA Auto Finance &bull; Enterprise ERP</div>
         </footer>
       </div>
-
-      {/* Embedded Floating AI Underwriter Chat Companion */}
-      <div className="fixed bottom-6 right-6 z-50 font-sans">
-        {aiChatOpen ? (
-          <div className="w-80 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl flex flex-col overflow-hidden max-h-[420px] transition-all">
-            <div className="bg-blue-600 px-4 py-3 flex items-center justify-between text-white">
-              <div className="flex items-center gap-2">
-                <Bot className="h-4.5 w-4.5 animate-bounce" />
-                <div>
-                  <h4 className="text-xs font-bold leading-none">Ask Me</h4>
-                  <p className="text-[9px] text-blue-200 leading-tight">Xerova AI Intelligent Assistant</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setAiChatOpen(false)}
-                className="text-blue-200 hover:text-white transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Chat list */}
-            <div className="flex-1 p-3 overflow-y-auto space-y-2 max-h-[300px] text-[11px] bg-slate-950">
-              {chatHistory.map((h, idx) => (
-                <div key={idx} className={`max-w-[85%] rounded-lg p-2.5 ${h.role === "user" ? "bg-blue-600 text-white ml-auto" : "bg-slate-900 text-slate-300 mr-auto"}`}>
-                  <p>{h.text}</p>
-                </div>
-              ))}
-              {aiLoading && (
-                <div className="bg-slate-900 text-slate-300 mr-auto rounded-lg p-2.5 max-w-[85%] flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-slate-500 animate-ping" />
-                  <span>Ask Me is thinking...</span>
-                </div>
-              )}
-            </div>
-
-            {/* Chat form */}
-            <form onSubmit={handleSendAiMessage} className="p-2 bg-slate-900 border-t border-slate-800 flex gap-1.5">
-              <input 
-                type="text"
-                placeholder="Ask me anything (loans, GPS, ledgers...)"
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                className="flex-1 bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
-              />
-              <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white p-1.5 rounded transition-colors">
-                <Send className="h-3.5 w-3.5" />
-              </button>
-            </form>
-          </div>
-        ) : (
-          <button 
-            onClick={() => setAiChatOpen(true)}
-            className="bg-blue-600 hover:bg-blue-500 text-white h-11 px-4 rounded-full flex items-center gap-2 shadow-lg transition-transform hover:scale-105 active:scale-95 duration-100"
-          >
-            <Bot className="h-4.5 w-4.5" />
-            <span className="text-xs font-semibold">Ask Me</span>
-          </button>
-        )}
-      </div>
-
     </div>
   );
 }

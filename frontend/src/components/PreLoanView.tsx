@@ -4,14 +4,15 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { Plus, ChevronLeft, ChevronRight, Check, AlertTriangle, FileText, User, MapPin, Car, DollarSign, Eye, X, Phone, UserCheck, ShieldAlert } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Check, AlertTriangle, FileText, User, MapPin, Car, DollarSign, Eye, X, Phone, UserCheck, ShieldAlert, ArrowRight } from "lucide-react";
 
 interface PreLoanViewProps {
   onSuccess: () => void;
   initialIsCreating?: boolean;
+  onOpenLedger?: (loanNo: string) => void;
 }
 
-export default function PreLoanView({ onSuccess, initialIsCreating = false }: PreLoanViewProps) {
+export default function PreLoanView({ onSuccess, initialIsCreating = false, onOpenLedger }: PreLoanViewProps) {
   const [proposals, setProposals] = useState<any[]>([]);
   const [isCreating, setIsCreating] = useState(initialIsCreating);
   
@@ -440,7 +441,20 @@ export default function PreLoanView({ onSuccess, initialIsCreating = false }: Pr
                   >
                     <Eye className="h-3.5 w-3.5" /> View Dossier
                   </button>
-                  <span className="text-[9px] bg-green-50 text-green-700 px-2 py-0.5 rounded font-mono font-bold border border-green-200 uppercase">READY FOR CONTRACT</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] bg-green-50 text-green-700 px-2 py-0.5 rounded font-mono font-bold border border-green-200 uppercase">READY FOR CONTRACT</span>
+                    {onOpenLedger && (
+                      <button
+                        onClick={() => {
+                          const loanNo = `HP-${pl.serialNo ? pl.serialNo.replace("PRE-", "") : pl.id}`;
+                          onOpenLedger(loanNo);
+                        }}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-2 py-1 rounded text-[10px] flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        Open HP Ledger <ArrowRight className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 

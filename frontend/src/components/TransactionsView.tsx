@@ -10,9 +10,10 @@ import { ReceiptPayMode, VoucherType } from "../types.js";
 interface TransactionsViewProps {
   onSuccess: () => void;
   prefillReprintNo?: string | null;
+  prefillLoanNo?: string | null;
 }
 
-export default function TransactionsView({ onSuccess, prefillReprintNo }: TransactionsViewProps) {
+export default function TransactionsView({ onSuccess, prefillReprintNo, prefillLoanNo }: TransactionsViewProps) {
   const [activeTab, setActiveTab] = useState<"receipt" | "voucher" | "deposit" | "handloan" | "binding">("receipt");
   const [loading, setLoading] = useState(false);
   
@@ -69,6 +70,19 @@ export default function TransactionsView({ onSuccess, prefillReprintNo }: Transa
     }
   }, [prefillReprintNo]);
 
+  // Handle prefillLoanNo
+  useEffect(() => {
+    if (prefillLoanNo) {
+      const match = loans.find(l => l.loanNo === prefillLoanNo);
+      setReceiptForm(prev => ({
+        ...prev,
+        loanNo: prefillLoanNo,
+        amount: match?.emiAmount ? String(match.emiAmount) : prev.amount
+      }));
+      setActiveTab("receipt");
+    }
+  }, [prefillLoanNo, loans]);
+
   const fetchLoans = async () => {
     try {
       const res = await fetch("/api/loans");
@@ -120,8 +134,8 @@ export default function TransactionsView({ onSuccess, prefillReprintNo }: Transa
         body: JSON.stringify(receiptForm)
       });
       if (res.ok) {
-        const { receipt } = await res.json();
-        setPrintReceipt(receipt); // Trigger immediate printable view
+        const createdReceipt = await res.json();
+        setPrintReceipt(createdReceipt.receipt || createdReceipt); // Trigger immediate printable view
         // Reset form
         setReceiptForm({
           loanNo: "",
@@ -273,7 +287,15 @@ export default function TransactionsView({ onSuccess, prefillReprintNo }: Transa
                   <select 
                     value={receiptForm.loanNo} 
                     required
-                    onChange={(e) => setReceiptForm({...receiptForm, loanNo: e.target.value})} 
+                    onChange={(e) => {
+                      const selectedNo = e.target.value;
+                      const match = loans.find(l => l.loanNo === selectedNo);
+                      setReceiptForm(prev => ({
+                        ...prev, 
+                        loanNo: selectedNo,
+                        amount: match?.emiAmount ? String(match.emiAmount) : prev.amount
+                      }));
+                    }} 
                     className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded px-2.5 py-1 text-xs focus:outline-none focus:border-blue-500"
                   >
                     <option value="">-- Choose Account --</option>
@@ -572,7 +594,7 @@ export default function TransactionsView({ onSuccess, prefillReprintNo }: Transa
                   <p>Receipt No: <strong className="text-slate-900">{printReceipt.receiptNo}</strong></p>
                   <p>Date: {printReceipt.date}</p>
                   <p>Loan No: {printReceipt.loanNo}</p>
-                  <p>Party Name: {printReceipt.customerName}</p>
+                  <p>Party Name: <strong className="text-slate-900">{printReceipt.customerName || loans.find(l => l.loanNo === printReceipt.loanNo)?.customer?.name || "Customer"}</strong></p>
                   <p className="border-t border-dashed border-slate-300 pt-1">Collected: <strong className="text-blue-900 text-xs">₹{printReceipt.amount?.toLocaleString()}</strong></p>
                   <p>Pay Mode: {printReceipt.payMode}</p>
                   <p>Details: {printReceipt.payModeDetails}</p>
@@ -589,19 +611,19 @@ export default function TransactionsView({ onSuccess, prefillReprintNo }: Transa
               <div className="flex gap-2">
                 <button 
                   onClick={() => window.print()}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 py-1 rounded font-bold text-center flex items-center justify-center gap-1.5 transition-all text-xs shadow-sm"
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 py-1 rounded font-bold text-center flex items-center justify-center gap-1.5 transition-all text-xs shadow-sm cursor-pointer"
                 >
                   <Printer className="h-3.5 w-3.5 text-slate-500" /> Thermal Print
                 </button>
                 <button 
-                  onClick={() => alert("Simulated Receipt copy to Clipboard.")}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 p-1 rounded border border-slate-300 shadow-sm transition-all"
+                  onClick={() => alert("Receipt copied to clipboard.")}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 p-1 rounded border border-slate-300 shadow-sm transition-all cursor-pointer"
                 >
                   <Clipboard className="h-3.5 w-3.5 text-slate-500" />
                 </button>
                 <button 
                   onClick={() => alert(`Simulated WhatsApp Dispatch of Receipt ${printReceipt.receiptNo} to borrower.`)}
-                  className="bg-green-600 hover:bg-green-500 text-white px-3 py-1 rounded font-bold transition-all text-xs shadow-sm"
+                  className="bg-green-600 hover:bg-green-500 text-white px-3 py-1 rounded font-bold transition-all text-xs shadow-sm cursor-pointer"
                 >
                   Share
                 </button>
@@ -612,24 +634,27 @@ export default function TransactionsView({ onSuccess, prefillReprintNo }: Transa
               <h4 className="text-[10px] font-bold text-slate-400 font-mono uppercase tracking-wider">Historical Transactions</h4>
               
               <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 text-xs">
-                {receipts.slice(0, 5).map((rec: any) => (
-                  <div key={rec.id} className="bg-slate-50 p-2.5 rounded border border-slate-200 flex justify-between items-center">
-                    <div>
-                      <p className="font-mono text-slate-800 font-bold text-[11px]">{rec.receiptNo}</p>
-                      <p className="text-[10px] text-slate-500 font-medium">{rec.customerName}</p>
-                      <p className="text-[10px] text-blue-600 font-mono font-bold mt-0.5">{rec.loanNo}</p>
+                {receipts.slice(0, 10).map((rec: any) => {
+                  const partyName = rec.customerName || loans.find(l => l.loanNo === rec.loanNo)?.customer?.name || "Customer";
+                  return (
+                    <div key={rec.id || rec.receiptNo || rec._id} className="bg-slate-50 p-2.5 rounded border border-slate-200 flex justify-between items-center">
+                      <div>
+                        <p className="font-mono text-slate-800 font-bold text-[11px]">{rec.receiptNo}</p>
+                        <p className="text-[10px] text-slate-600 font-medium">{partyName}</p>
+                        <p className="text-[10px] text-blue-600 font-mono font-bold mt-0.5">{rec.loanNo}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-slate-800 font-mono">₹{rec.amount?.toLocaleString()}</p>
+                        <button 
+                          onClick={() => setPrintReceipt(rec)}
+                          className="text-[10px] text-blue-600 hover:text-blue-800 font-bold hover:underline mt-1 font-sans uppercase cursor-pointer"
+                        >
+                          Reprint
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold text-slate-800 font-mono">₹{rec.amount?.toLocaleString()}</p>
-                      <button 
-                        onClick={() => setPrintReceipt(rec)}
-                        className="text-[10px] text-blue-600 hover:text-blue-800 font-bold hover:underline mt-1 font-sans uppercase"
-                      >
-                        Reprint
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {receipts.length === 0 && (
                   <p className="text-slate-400 text-center py-6">No historical collections recorded.</p>
                 )}

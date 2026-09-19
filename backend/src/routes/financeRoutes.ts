@@ -96,16 +96,39 @@ router.get("/seized", async (req, res) => {
 router.post("/seized", async (req, res) => {
   try {
     const body = req.body;
+    let vehicleName = body.vehicleName;
+    let rcNo = body.rcNo || body.vehicleNo;
+    let customerName = body.customerName;
+    let customerPhone = body.customerPhone;
+    let loanBalance = body.loanBalance;
+
+    if (body.loanNo) {
+      const loan = await LoanModel.findOne({ loanNo: body.loanNo });
+      if (loan) {
+        loan.status = "SEIZED";
+        await loan.save();
+        vehicleName = vehicleName || loan.vehicle?.vehicleName || loan.vehicle?.model || "Two Wheeler";
+        rcNo = rcNo || loan.vehicle?.rcNo || "TN-PENDING";
+        customerName = customerName || loan.customer?.name || "Customer";
+        customerPhone = customerPhone || loan.customer?.phone || loan.customer?.mobile || "N/A";
+        loanBalance = loanBalance || loan.pendingAmount || loan.loanAmount;
+      }
+    }
+
     const item = await SeizedVehicleModel.create({
       ...body,
       id: body.id || `SZ-${Date.now().toString().slice(-5)}`,
-      seizureDate: body.seizureDate || new Date().toISOString().split("T")[0],
+      seizureDate: body.seizureDate || body.seizedDate || new Date().toISOString().split("T")[0],
+      vehicleName: vehicleName || "Two Wheeler",
+      vehicleNo: rcNo || "TN-PENDING",
+      rcNo: rcNo || "TN-PENDING",
+      customerName: customerName || "Customer",
+      customerPhone: customerPhone || "N/A",
+      loanBalance: Number(loanBalance || 0),
+      godownName: body.godownName || body.godownLocation || "Katpadi Main Yard",
+      godownLocation: body.godownName || body.godownLocation || "Katpadi Main Yard",
       status: "IN_YARD"
     });
-
-    if (body.loanNo) {
-      await LoanModel.findOneAndUpdate({ loanNo: body.loanNo }, { status: "SEIZED" });
-    }
 
     await AuditLogModel.create({
       id: "LOG-" + Date.now(),
@@ -116,8 +139,12 @@ router.post("/seized", async (req, res) => {
     });
 
     res.status(201).json(item);
-  } catch (err) { res.status(500).json({ error: "Error recording vehicle seizure" }); }
+  } catch (err) { 
+    console.error("[Seized] Error creating record:", err);
+    res.status(500).json({ error: "Error recording vehicle seizure" }); 
+  }
 });
+
 router.post("/seized/:id/release", async (req, res) => {
   try {
     const { id } = req.params;
@@ -130,15 +157,24 @@ router.post("/seized/:id/release", async (req, res) => {
     if (item.loanNo) {
       await LoanModel.findOneAndUpdate({ loanNo: item.loanNo }, { status: "ACTIVE" });
     }
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: new Date().toISOString(),
+      user: "Recovery Officer",
+      action: "VEHICLE_RELEASED",
+      details: `Vehicle release authorized: ${item.vehicleName} (${item.rcNo}) for loan ${item.loanNo}.`
+    });
     res.json(item);
   } catch (err) { res.status(500).json({ error: "Error releasing vehicle" }); }
 });
+
 router.post("/seized/:id/auction", async (req, res) => {
   try {
     const { id } = req.params;
+    const finalBidAmount = Number(req.body.auctionPrice || req.body.salePrice || 0);
     const item = await SeizedVehicleModel.findOneAndUpdate(
       { id },
-      { status: "AUCTIONED", auctionPrice: Number(req.body.auctionPrice || 0) },
+      { status: "AUCTIONED", auctionPrice: finalBidAmount },
       { new: true }
     );
     if (!item) return res.status(404).json({ error: "Seized record not found" });
@@ -150,14 +186,37 @@ router.post("/seized/:id/auction", async (req, res) => {
       rcNo: item.rcNo,
       buyerName: req.body.buyerName || "Public Auction Bidder",
       buyerPhone: req.body.buyerPhone || "N/A",
-      basePrice: item.valuationAmount || 0,
-      finalBidAmount: Number(req.body.auctionPrice || 0),
+      basePrice: item.valuationAmount || item.loanBalance || 0,
+      finalBidAmount,
       auctionDate: new Date().toISOString().split("T")[0],
       status: "COMPLETED"
     });
 
+    if (item.loanNo) {
+      const loan = await LoanModel.findOne({ loanNo: item.loanNo });
+      if (loan) {
+        loan.totalPaidAmount = (loan.totalPaidAmount || 0) + finalBidAmount;
+        loan.pendingAmount = Math.max(0, (loan.totalDueAmount || 0) - loan.totalPaidAmount);
+        if (loan.pendingAmount <= 0) {
+          loan.status = "CLOSED";
+        }
+        await loan.save();
+      }
+    }
+
+    await AuditLogModel.create({
+      id: "LOG-" + Date.now(),
+      timestamp: new Date().toISOString(),
+      user: "Recovery Desk",
+      action: "VEHICLE_AUCTIONED",
+      details: `Seized asset auctioned: ${item.vehicleName} (${item.rcNo}) for ₹${finalBidAmount.toLocaleString()} to ${req.body.buyerName || "Bidder"}`
+    });
+
     res.json(item);
-  } catch (err) { res.status(500).json({ error: "Error auctioning vehicle" }); }
+  } catch (err) { 
+    console.error("[Seized] Auction error:", err);
+    res.status(500).json({ error: "Error auctioning vehicle" }); 
+  }
 });
 router.post("/seized/:id/writeoff", async (req, res) => {
   try {
