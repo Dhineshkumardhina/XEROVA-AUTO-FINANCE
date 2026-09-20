@@ -258,11 +258,11 @@ export default function ConsultancyView({ initialTab = "purchase", onTabChange }
 
     try {
       const updatedCalls = [
-        ...buyoutRecord.callHistory, 
+        ...(buyoutRecord.callHistory || []), 
         { date: new Date().toISOString().split("T")[0], summary: `Transaction closed with buyer ${buyoutForm.buyerName}. Agreed Price: ₹${buyoutForm.soldPrice.toLocaleString()}. Remarks: ${buyoutForm.remarks}` }
       ];
       const updatedRcs = [
-        ...buyoutRecord.rcBookHistory,
+        ...(buyoutRecord.rcBookHistory || []),
         { date: new Date().toISOString().split("T")[0], status: `Sold. Instigated RTO transfer ownership to ${buyoutForm.buyerName}. Transfer Fee: ₹${buyoutForm.rtoTransferCharges}.` }
       ];
 

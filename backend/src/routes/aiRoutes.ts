@@ -32,7 +32,23 @@ router.post("/risk-score", async (req, res) => {
 
 router.post("/fraud-check", async (req, res) => {
   try {
-    const result = await checkFraud(req.body);
+    const proposalData = req.body.proposal || req.body;
+    const result = await checkFraud(proposalData);
+    const propId = proposalData.id || proposalData.serialNo || req.body.id;
+    if (propId) {
+      await PreLoanModel.findOneAndUpdate(
+        { $or: [{ id: propId }, { serialNo: propId }] },
+        {
+          $set: {
+            riskScore: result.fraudRiskScore,
+            fraudFlagged: result.isFlagged,
+            aiFraudFlag: result.isFlagged,
+            aiReportText: result.auditRecommendation,
+            aiFraudReasons: result.reasons
+          }
+        }
+      );
+    }
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: "Error checking fraud" });

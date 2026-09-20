@@ -6,16 +6,14 @@ if (fs.existsSync("frontend/dist")) {
   fs.cpSync("frontend/dist", "dist", { recursive: true });
 }
 
-console.log("[Build] Bundling standalone serverless API handlers for Vercel...");
+console.log("[Build] Bundling standalone serverless API handler for Vercel...");
+if (!fs.existsSync("api")) {
+  fs.mkdirSync("api", { recursive: true });
+}
+
 execSync(
-  'npx esbuild api/serverless.ts --bundle --platform=node --target=node22 --external:@electric-sql/pglite --outfile=api/index.js --footer:js="const _h = module.exports.default || module.exports; module.exports = _h; module.exports.default = _h;"',
+  'npx --yes esbuild scripts/serverless.ts --bundle --platform=node --target=node20 --external:@electric-sql/pglite --outfile=api/index.js --footer:js="const _h = module.exports.default || module.exports; module.exports = _h; module.exports.default = _h;"',
   { stdio: "inherit" }
 );
-fs.copyFileSync("api/index.js", "api/[...path].js");
-if (!fs.existsSync("dist/api")) {
-  fs.mkdirSync("dist/api", { recursive: true });
-}
-fs.copyFileSync("api/index.js", "dist/api/index.js");
-fs.copyFileSync("api/[...path].js", "dist/api/[...path].js");
-console.log("[Build] Standalone serverless API bundled successfully!");
 
+console.log("[Build] Standalone serverless API bundled successfully at api/index.js!");

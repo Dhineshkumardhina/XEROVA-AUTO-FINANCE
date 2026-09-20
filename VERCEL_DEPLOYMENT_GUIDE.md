@@ -18,9 +18,9 @@ This repository is fully configured and ready for **1-click / zero-configuration
    - Select your `xerova-auto-finance` repository.
 
 3. **Configure Project Settings** in Vercel:
-   - **Framework Preset**: `Vite` (automatically detected)
-   - **Build Command**: `npm run build` (or `npm run vercel-build`)
-   - **Output Directory**: `frontend/dist`
+   - **Framework Preset**: `Other` (or leave Vite)
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist` (automatically synced with `vercel.json`)
    - **Root Directory**: `./` (leave default)
 
 4. **Add Environment Variables**:

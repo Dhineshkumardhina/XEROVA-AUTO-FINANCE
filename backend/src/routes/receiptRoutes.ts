@@ -17,13 +17,16 @@ router.post("/", async (req, res) => {
     const body = req.body;
     const amount = Number(body.amount) || 0;
     const penalty = Number(body.penaltyCollected) || 0;
+    const paymentMode = body.paymentMode || body.payMode || "CASH";
 
     const receipt = await ReceiptModel.create({
       ...body,
       receiptNo: body.receiptNo || `REC-${Date.now().toString().slice(-6)}`,
       date: body.date || new Date().toISOString().split("T")[0],
       amount,
-      penaltyCollected: penalty
+      penaltyCollected: penalty,
+      paymentMode,
+      payMode: paymentMode
     });
 
     // Reconcile loan schedule

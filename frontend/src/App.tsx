@@ -8,7 +8,8 @@ import {
   LayoutDashboard, Search, FileText, BookOpen, Wallet, Car, Settings, 
   ShieldAlert, LogOut, Clock, UserCheck, RefreshCw, AlertCircle, 
   FileCheck, CheckCircle, Bell, ChevronDown, ChevronRight, 
-  PiggyBank, Coins, AlertTriangle, FileSpreadsheet, Building2
+  PiggyBank, Coins, AlertTriangle, FileSpreadsheet, Building2,
+  Users, MapPin, Cpu, Smartphone
 } from "lucide-react";
 
 // Core Views
@@ -22,13 +23,17 @@ import SeizedVehiclesView from "./components/SeizedVehiclesView.js";
 import AccountsSettingsView from "./components/AccountsSettingsView.js";
 import EmployeeSessionsView from "./components/EmployeeSessionsView.js";
 import LoginView from "./components/LoginView.js";
+import CustomerDetailsTableView from "./components/CustomerDetailsTableView.js";
+import FraudDetectionView from "./components/FraudDetectionView.js";
+import CustomerPortalView from "./components/CustomerPortalView.js";
 
 // Financial Views
 import { 
   DepositsView, 
   BindingLoanView, 
   HLPaymentView, 
-  PendingListView 
+  PendingListView,
+  GoogleLocatorView
 } from "./components/ExtraViews.js";
 
 type CurrentView = 
@@ -44,7 +49,11 @@ type CurrentView =
   | "deposits_view"
   | "binding_loan_view"
   | "hl_payment_view"
-  | "pending_list_view";
+  | "pending_list_view"
+  | "customer_details"
+  | "fraud_detection"
+  | "gps_locator"
+  | "customer_portal";
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -324,6 +333,14 @@ export default function App() {
                 <Search className="h-3.5 w-3.5 shrink-0" />
                 Search &amp; Inquiry
               </button>
+
+              <button 
+                onClick={() => { setCurrentView("customer_details"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "customer_details" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <Users className="h-3.5 w-3.5 shrink-0" />
+                Customer Dossiers
+              </button>
             </div>
           </div>
 
@@ -370,6 +387,14 @@ export default function App() {
                 <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
                 Seized Yard &amp; Auctions
               </button>
+
+              <button 
+                onClick={() => { setCurrentView("gps_locator"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "gps_locator" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                GPS Field Locator
+              </button>
             </div>
           </div>
 
@@ -399,6 +424,14 @@ export default function App() {
               >
                 <Car className="h-3.5 w-3.5 shrink-0" />
                 Vehicle Consultancy
+              </button>
+
+              <button 
+                onClick={() => { setCurrentView("fraud_detection"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "fraud_detection" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <Cpu className="h-3.5 w-3.5 shrink-0" />
+                AI Fraud &amp; Risk Radar
               </button>
             </div>
           </div>
@@ -437,6 +470,14 @@ export default function App() {
               >
                 <Clock className="h-3.5 w-3.5 shrink-0" />
                 Staff Shift Sessions
+              </button>
+
+              <button 
+                onClick={() => { setCurrentView("customer_portal"); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded text-xs transition-colors cursor-pointer ${currentView === "customer_portal" ? "bg-indigo-600 text-white font-semibold shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+              >
+                <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                Customer Self-Service
               </button>
             </div>
           </div>
@@ -604,6 +645,10 @@ export default function App() {
                     binding_loan_view: "binding_loan_view",
                     hl_payment_view: "hl_payment_view",
                     pending_list_view: "pending_list_view",
+                    customer_details: "customer_details",
+                    fraud_detection: "fraud_detection",
+                    gps_locator: "gps_locator",
+                    customer_portal: "customer_portal",
                     PreLoan: "pre_loan",
                     LedgerEntry: "ledger_entry",
                     Search: "search",
@@ -712,6 +757,31 @@ export default function App() {
                   setSelectedLoanNo(loanNo);
                   setCurrentView("transactions");
                 }}
+              />
+            )}
+
+            {currentView === "customer_details" && (
+              <CustomerDetailsTableView 
+                onViewLoan={(loanNo) => {
+                  setSelectedLoanNo(loanNo);
+                  setCurrentView("ledger_entry");
+                }}
+                prefilledQuery={globalSearchQuery}
+              />
+            )}
+
+            {currentView === "fraud_detection" && (
+              <FraudDetectionView />
+            )}
+
+            {currentView === "gps_locator" && (
+              <GoogleLocatorView />
+            )}
+
+            {currentView === "customer_portal" && (
+              <CustomerPortalView 
+                userPhone={userProfile?.phone || "+91 98421 55667"}
+                onLogout={() => setCurrentView("dashboard")}
               />
             )}
 

@@ -67,7 +67,7 @@ export default function SearchView({ onViewLoan, initialQuery }: SearchViewProps
     }
   };
 
-  const handleSearch = async (overrideQuery?: string) => {
+  const handleSearch = async (overrideQuery?: string | React.MouseEvent) => {
     setLoading(true);
     try {
       const q = typeof overrideQuery === "string" ? overrideQuery : query;

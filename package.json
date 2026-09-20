@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=20.0.0"
   },
   "workspaces": [
     "frontend",
     "backend",
     "database"
   ],
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "pg": "^8.23.0"
+  },
   "overrides": {
     "qs": "^6.16.0",
     "express": {
@@ -29,6 +33,7 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
+    "esbuild": "^0.25.0",
     "rollup": "^4.34.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"

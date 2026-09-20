@@ -30461,6 +30461,7 @@ var require_db2 = __commonJS({
     var pg_1 = require_lib5();
     var pglite_1 = require("@electric-sql/pglite");
     var dotenv_1 = __importDefault(require_main2());
+    var node_path_1 = __importDefault(require("node:path"));
     dotenv_1.default.config();
     var pgPool = null;
     var pgliteInstance = null;
@@ -30532,8 +30533,9 @@ var require_db2 = __commonJS({
         }
       }
       try {
-        console.log(`[PostgreSQL] Initializing embedded local PostgreSQL (PGlite)...`);
-        pgliteInstance = new pglite_1.PGlite();
+        const pglitePath = process.env.VERCEL ? void 0 : process.env.PGLITE_DATA_DIR || node_path_1.default.resolve(process.cwd(), ".pgdata");
+        console.log(`[PostgreSQL] Initializing embedded local PostgreSQL (PGlite${pglitePath ? ` at ${pglitePath}` : " in-memory"})...`);
+        pgliteInstance = pglitePath ? new pglite_1.PGlite(pglitePath) : new pglite_1.PGlite();
         await pgliteInstance.waitReady;
         console.log(`[PostgreSQL] Embedded PGlite engine ready.`);
         isConnected = true;
@@ -52611,7 +52613,7 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// api/serverless.ts
+// scripts/serverless.ts
 var serverless_exports = {};
 __export(serverless_exports, {
   default: () => handler
@@ -52749,10 +52751,17 @@ function generateInstallments(loanAmount, rate, duration, emi, startDate) {
   const insts = [];
   let currentBalance = loanAmount;
   const monthlyRate = rate / 12 / 100;
-  const dateObj = new Date(startDate || Date.now());
+  const baseDate = new Date(startDate || Date.now());
+  const startYear = baseDate.getFullYear();
+  const startMonth = baseDate.getMonth();
+  const startDay = baseDate.getDate();
   for (let i2 = 1; i2 <= duration; i2++) {
-    dateObj.setMonth(dateObj.getMonth() + 1);
-    const dueDate = dateObj.toISOString().split("T")[0];
+    const targetDate = new Date(startYear, startMonth + i2, startDay);
+    const expectedMonth = (startMonth + i2) % 12;
+    if (targetDate.getMonth() !== (expectedMonth < 0 ? expectedMonth + 12 : expectedMonth)) {
+      targetDate.setDate(0);
+    }
+    const dueDate = targetDate.toISOString().split("T")[0];
     const interestPart = Math.round(currentBalance * monthlyRate);
     let principalPart = emi - interestPart;
     if (i2 === duration) {
@@ -52786,7 +52795,20 @@ router2.post("/", async (req, res) => {
     let customer = body.customer;
     if (body.borrowerId && !customer) {
       customer = await import_database2.CustomerModel.findOne({ id: body.borrowerId });
+    } else if (customer) {
+      const phone = customer.phone || customer.mobile;
+      let existingCustomer = phone ? await import_database2.CustomerModel.findOne({ phone }) : null;
+      if (!existingCustomer) {
+        const custId = customer.id || `CUST-${Date.now().toString().slice(-4)}`;
+        customer.id = custId;
+        existingCustomer = await import_database2.CustomerModel.create({
+          ...customer,
+          id: custId
+        });
+      }
+      customer = existingCustomer;
     }
+    const borrowerId = customer?.id || body.borrowerId || `CUST-${Date.now().toString().slice(-4)}`;
     const loanAmount = Number(body.loanAmount) || 0;
     const interestRate = Number(body.interestRate) || 16.5;
     const durationMonths = Number(body.durationMonths) || 24;
@@ -52796,7 +52818,7 @@ router2.post("/", async (req, res) => {
     const newLoan = await import_database2.LoanModel.create({
       ...body,
       loanNo: body.loanNo || `HP-${Date.now().toString().slice(-4)}`,
-      borrowerId: body.borrowerId || customer?.id || "CUST-DEFAULT",
+      borrowerId,
       customer,
       loanAmount,
       interestRate,
@@ -52810,6 +52832,21 @@ router2.post("/", async (req, res) => {
       installments,
       payments: []
     });
+    if (body.handloanAmount && Number(body.handloanAmount) > 0) {
+      await import_database2.HandLoanModel.create({
+        id: `HL-${Date.now().toString().slice(-5)}`,
+        loanNo: newLoan.loanNo,
+        customerName: customer?.name || "Borrower",
+        borrowerName: customer?.name || "Borrower",
+        phone: customer?.phone || "N/A",
+        amount: Number(body.handloanAmount),
+        givenDate: body.disbursementDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+        status: "ACTIVE",
+        repaidAmount: 0,
+        remarks: body.handloanRemarks || `Auxiliary advance linked to HP loan ${newLoan.loanNo}`,
+        payments: []
+      });
+    }
     await import_database2.AuditLogModel.create({
       id: "LOG-" + Date.now(),
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
@@ -52869,12 +52906,15 @@ router3.post("/", async (req, res) => {
     const body = req.body;
     const amount = Number(body.amount) || 0;
     const penalty = Number(body.penaltyCollected) || 0;
+    const paymentMode = body.paymentMode || body.payMode || "CASH";
     const receipt = await import_database3.ReceiptModel.create({
       ...body,
       receiptNo: body.receiptNo || `REC-${Date.now().toString().slice(-6)}`,
       date: body.date || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
       amount,
-      penaltyCollected: penalty
+      penaltyCollected: penalty,
+      paymentMode,
+      payMode: paymentMode
     });
     if (body.loanNo) {
       const loan = await import_database3.LoanModel.findOne({ loanNo: body.loanNo });
@@ -53060,10 +53100,18 @@ router4.post("/:id/status", async (req, res) => {
 router4.post("/:id/fraud-flag", async (req, res) => {
   try {
     const { id } = req.params;
-    const { aiFraudFlag, aiFraudReasons } = req.body;
+    const fraudFlagged = req.body.fraudFlagged !== void 0 ? Boolean(req.body.fraudFlagged) : req.body.aiFraudFlag !== void 0 ? Boolean(req.body.aiFraudFlag) : true;
+    const aiFraudReasons = req.body.aiFraudReasons || req.body.reasons || [];
+    const updateData = {
+      fraudFlagged,
+      aiFraudFlag: fraudFlagged,
+      aiFraudReasons
+    };
+    if (req.body.riskScore !== void 0) updateData.riskScore = req.body.riskScore;
+    if (req.body.aiReportText) updateData.aiReportText = req.body.aiReportText;
     const updated = await import_database4.PreLoanModel.findOneAndUpdate(
       { $or: [{ id }, { serialNo: id }] },
-      { $set: { aiFraudFlag, aiFraudReasons } },
+      { $set: updateData },
       { new: true }
     );
     if (!updated) return res.status(404).json({ error: "Proposal not found" });
@@ -75669,39 +75717,57 @@ function getGeminiClient() {
     return null;
   }
 }
+function parseJsonSafely(text) {
+  if (!text) return null;
+  const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const match2 = cleaned.match(/\{[\s\S]*\}/);
+    if (match2) {
+      try {
+        return JSON.parse(match2[0]);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
 async function generateRiskScore(loanData) {
+  const income = loanData.monthlyIncome || loanData.income || 25e3;
+  const emi = loanData.emiAmount || 3e3;
+  const ratio = emi / income;
+  let score = 750;
+  let riskLevel = "LOW";
+  let recommendation = "Approve automatically with standard interest rate.";
+  if (ratio > 0.4) {
+    score = 620;
+    riskLevel = "MEDIUM";
+    recommendation = "Require one additional co-obligant or guarantor.";
+  }
+  if (ratio > 0.6 || income < 15e3) {
+    score = 510;
+    riskLevel = "HIGH";
+    recommendation = "High DTI ratio. Consider reducing loan amount or rejecting.";
+  }
+  const fallback = {
+    score,
+    riskLevel,
+    defaultProbability: ratio > 0.5 ? "28%" : "8%",
+    recommendation,
+    keyFactors: [
+      `Monthly Income: \u20B9${Number(income).toLocaleString()}`,
+      `Proposed EMI: \u20B9${Number(emi).toLocaleString()} (DTI: ${Math.round(ratio * 100)}%)`,
+      `Occupation Stability: ${loanData.occupation || "Employed"}`
+    ]
+  };
   const ai = getGeminiClient();
   if (!ai) {
-    const income = loanData.monthlyIncome || 25e3;
-    const emi = loanData.emiAmount || 3e3;
-    const ratio = emi / income;
-    let score = 750;
-    let riskLevel = "LOW";
-    let recommendation = "Approve automatically with standard interest rate.";
-    if (ratio > 0.4) {
-      score = 620;
-      riskLevel = "MEDIUM";
-      recommendation = "Require one additional co-obligant or guarantor.";
-    }
-    if (ratio > 0.6 || income < 15e3) {
-      score = 510;
-      riskLevel = "HIGH";
-      recommendation = "High DTI ratio. Consider reducing loan amount or rejecting.";
-    }
-    return {
-      score,
-      riskLevel,
-      defaultProbability: ratio > 0.5 ? "28%" : "8%",
-      recommendation,
-      keyFactors: [
-        `Monthly Income: \u20B9${income.toLocaleString()}`,
-        `Proposed EMI: \u20B9${emi.toLocaleString()} (DTI: Math.round(ratio*100)%)`,
-        `Occupation Stability: ${loanData.occupation || "Employed"}`
-      ]
-    };
+    return fallback;
   }
   try {
-    const prompt = `You are an AI Underwriter for XEROVA Auto Finance. Evaluate this vehicle loan application and respond ONLY with valid JSON (no markdown fences):
+    const prompt = `You are an AI Underwriter for XEROVA Auto Finance. Evaluate this vehicle loan application and respond ONLY with valid JSON:
     ${JSON.stringify(loanData)}
     Return JSON format:
     {"score": 750, "riskLevel": "LOW", "defaultProbability": "5%", "recommendation": "...", "keyFactors": ["..."]}`;
@@ -75709,63 +75775,72 @@ async function generateRiskScore(loanData) {
       model: "gemini-2.0-flash",
       contents: prompt
     });
-    const text = response.text || "{}";
-    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(cleaned);
+    const parsed = parseJsonSafely(response.text || "");
+    return parsed || fallback;
   } catch (e2) {
     console.error("[AI] Error generating risk score:", e2);
-    return {
-      score: 680,
-      riskLevel: "MEDIUM",
-      defaultProbability: "15%",
-      recommendation: "AI analysis timed out. Evaluated with standard manual criteria.",
-      keyFactors: ["Standard verification required."]
-    };
+    return fallback;
   }
 }
 async function checkFraud(applicantData) {
+  const data = applicantData?.proposal || applicantData || {};
+  const pan = data.panNo || data.applicantPan || data.govtId || "";
+  const phone = data.phone || data.housePhone || "";
+  let flag = false;
+  const reasons = [];
+  if (!pan || pan.length !== 10) {
+    flag = true;
+    reasons.push("Invalid or missing PAN number format.");
+  }
+  if (!phone || phone.length < 10) {
+    flag = true;
+    reasons.push("Suspicious or incomplete contact phone number.");
+  }
+  const fallback = {
+    flagged: flag,
+    isFlagged: flag,
+    confidence: flag ? "85%" : "95%",
+    riskScore: flag ? 75 : 12,
+    fraudRiskScore: flag ? 75 : 12,
+    reasons: flag ? reasons : ["No fraud anomalies detected in applicant KYC."],
+    riskFactors: flag ? reasons : [],
+    verificationAction: flag ? "Mandatory physical field verification by Recovery Officer." : "Standard digital verification sufficient.",
+    auditRecommendation: flag ? "Hold application: suspicious identity attributes detected. Field verification required before disbursement." : "Application verified. Low fraud probability detected in KYC records."
+  };
   const ai = getGeminiClient();
   if (!ai) {
-    const pan = applicantData.panNo || "";
-    const phone = applicantData.phone || "";
-    let flag = false;
-    const reasons = [];
-    if (!pan || pan.length !== 10) {
-      flag = true;
-      reasons.push("Invalid or missing PAN number format.");
-    }
-    if (!phone || phone.length < 10) {
-      flag = true;
-      reasons.push("Suspicious contact phone number.");
-    }
-    return {
-      flagged: flag,
-      confidence: flag ? "85%" : "95%",
-      riskScore: flag ? 75 : 12,
-      reasons: flag ? reasons : ["No fraud anomalies detected in applicant KYC."],
-      verificationAction: flag ? "Mandatory physical field verification by Recovery Officer." : "Standard digital verification sufficient."
-    };
+    return fallback;
   }
   try {
     const prompt = `Analyze this auto finance applicant for fraud indicators. Return ONLY valid JSON:
-    ${JSON.stringify(applicantData)}
+    ${JSON.stringify(data)}
     Format: {"flagged": false, "confidence": "95%", "riskScore": 15, "reasons": ["..."], "verificationAction": "..."}`;
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
       contents: prompt
     });
-    const text = response.text || "{}";
-    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(cleaned);
+    const parsed = parseJsonSafely(response.text || "");
+    if (parsed) {
+      const isFlagged = Boolean(parsed.flagged ?? parsed.isFlagged ?? flag);
+      const score = Number(parsed.riskScore ?? parsed.fraudRiskScore ?? (isFlagged ? 75 : 15));
+      const resReasons = parsed.reasons || parsed.riskFactors || reasons;
+      const act = parsed.verificationAction || parsed.auditRecommendation || (isFlagged ? "Mandatory physical field verification." : "Standard digital verification.");
+      return {
+        flagged: isFlagged,
+        isFlagged,
+        confidence: parsed.confidence || "95%",
+        riskScore: score,
+        fraudRiskScore: score,
+        reasons: resReasons,
+        riskFactors: resReasons,
+        verificationAction: act,
+        auditRecommendation: act
+      };
+    }
+    return fallback;
   } catch (e2) {
     console.error("[AI] Error checking fraud:", e2);
-    return {
-      flagged: false,
-      confidence: "80%",
-      riskScore: 20,
-      reasons: ["AI service offline. KYC format validated by fallback."],
-      verificationAction: "Standard field check."
-    };
+    return fallback;
   }
 }
 async function runFinanceAudit(data) {
@@ -75806,18 +75881,19 @@ async function runFinanceAudit(data) {
       model: "gemini-2.0-flash",
       contents: prompt
     });
-    const text = response.text || "{}";
-    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    const parsed = JSON.parse(cleaned);
-    return {
-      ...baseResult,
-      ...parsed,
-      overallHealth: parsed.auditorVerdict || baseResult.overallHealth,
-      auditScore: parsed.integrityScore || baseResult.auditScore,
-      summary: parsed.auditorCertifiedOpinion || baseResult.summary,
-      anomaliesDetected: parsed.anomaliesFound || baseResult.anomaliesDetected,
-      actionItems: parsed.keyRecommendations || baseResult.actionItems
-    };
+    const parsed = parseJsonSafely(response.text || "");
+    if (parsed) {
+      return {
+        ...baseResult,
+        ...parsed,
+        overallHealth: parsed.auditorVerdict || baseResult.overallHealth,
+        auditScore: parsed.integrityScore || baseResult.auditScore,
+        summary: parsed.auditorCertifiedOpinion || baseResult.summary,
+        anomaliesDetected: parsed.anomaliesFound || baseResult.anomaliesDetected,
+        actionItems: parsed.keyRecommendations || baseResult.actionItems
+      };
+    }
+    return baseResult;
   } catch (e2) {
     console.error("[AI] Error running audit:", e2);
     return baseResult;
@@ -75837,7 +75913,23 @@ router8.post("/risk-score", async (req, res) => {
 });
 router8.post("/fraud-check", async (req, res) => {
   try {
-    const result = await checkFraud(req.body);
+    const proposalData = req.body.proposal || req.body;
+    const result = await checkFraud(proposalData);
+    const propId = proposalData.id || proposalData.serialNo || req.body.id;
+    if (propId) {
+      await import_database8.PreLoanModel.findOneAndUpdate(
+        { $or: [{ id: propId }, { serialNo: propId }] },
+        {
+          $set: {
+            riskScore: result.fraudRiskScore,
+            fraudFlagged: result.isFlagged,
+            aiFraudFlag: result.isFlagged,
+            aiReportText: result.auditRecommendation,
+            aiFraudReasons: result.reasons
+          }
+        }
+      );
+    }
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: "Error checking fraud" });
@@ -76087,12 +76179,279 @@ async function initDB() {
             { key: "overduePenaltyPerDay", value: 100 },
             { key: "gracePeriodDays", value: 5 }
           ]);
+          await import_database9.CustomerModel.create([
+            {
+              id: "CUST-1001",
+              name: "M. Ramesh Kumar",
+              phone: "+91 98421 55667",
+              address: "No. 14, Gandhi Road, Sathuvachari",
+              city: "Vellore",
+              state: "Tamil Nadu",
+              pincode: "632009",
+              panNo: "ABCDE1234F",
+              aadhaarNo: "4567 8901 2345",
+              occupation: "Transport Business",
+              monthlyIncome: 45e3,
+              guarantors: [{ name: "P. Murugan", phone: "+91 98421 88990", address: "Gandhi Road, Vellore" }]
+            },
+            {
+              id: "CUST-1002",
+              name: "K. Priya Dharshini",
+              phone: "+91 94432 11223",
+              address: "Plot 8A, Phase 2, TNHB",
+              city: "Katpadi",
+              state: "Tamil Nadu",
+              pincode: "632014",
+              panNo: "FGHIJ5678K",
+              aadhaarNo: "7890 1234 5678",
+              occupation: "Software Professional",
+              monthlyIncome: 68e3,
+              guarantors: [{ name: "K. Karthikeyan", phone: "+91 94432 99001", address: "TNHB Katpadi" }]
+            },
+            {
+              id: "CUST-1003",
+              name: "S. Arumugam",
+              phone: "+91 97890 33445",
+              address: "12/4 Bazaar Street",
+              city: "Ranipet",
+              state: "Tamil Nadu",
+              pincode: "632401",
+              panNo: "KLMNO9012P",
+              aadhaarNo: "2345 6789 0123",
+              occupation: "Dairy Farming & Milk Supply",
+              monthlyIncome: 35e3
+            },
+            {
+              id: "CUST-1004",
+              name: "G. Venkatesh",
+              phone: "+91 98944 66778",
+              address: "45 Anna Salai",
+              city: "Vellore",
+              state: "Tamil Nadu",
+              pincode: "632001",
+              panNo: "QRSTU3456V",
+              aadhaarNo: "9012 3456 7890",
+              occupation: "Retail Merchant",
+              monthlyIncome: 52e3
+            }
+          ]);
+          const buildInstallments = (count, emi, startYear, startMonth, paidCount, rcpPrefix) => {
+            const list = [];
+            for (let i2 = 1; i2 <= count; i2++) {
+              const d = new Date(startYear, startMonth - 1 + (i2 - 1), 10);
+              const dueDate = d.toISOString().split("T")[0];
+              const isPaid = i2 <= paidCount;
+              list.push({
+                instNo: i2,
+                dueDate,
+                emiAmount: emi,
+                principalPart: Math.round(emi * 0.75),
+                interestPart: Math.round(emi * 0.25),
+                status: isPaid ? "PAID" : "PENDING",
+                paidAmount: isPaid ? emi : 0,
+                paidDate: isPaid ? dueDate : void 0,
+                receiptNo: isPaid ? `RCP-${rcpPrefix + i2}` : void 0
+              });
+            }
+            return list;
+          };
+          await import_database9.LoanModel.create([
+            {
+              loanNo: "LN-2025-001",
+              borrowerId: "CUST-1001",
+              customer: { id: "CUST-1001", name: "M. Ramesh Kumar", phone: "+91 98421 55667" },
+              vehicle: { vehicleName: "Honda Activa 6G 110cc", rcNo: "TN 23 BK 4092", engineNo: "JF91E881290", chassisNo: "ME4JF913LK10239", modelYear: "2023" },
+              loanAmount: 65e3,
+              interestRate: 16.5,
+              durationMonths: 18,
+              emiAmount: 4104,
+              totalDueAmount: 73872,
+              totalPaidAmount: 8208,
+              pendingAmount: 65664,
+              disbursementDate: "2025-01-10",
+              status: "ACTIVE",
+              installments: buildInstallments(18, 4104, 2025, 2, 2, 8800)
+            },
+            {
+              loanNo: "LN-2025-002",
+              borrowerId: "CUST-1002",
+              customer: { id: "CUST-1002", name: "K. Priya Dharshini", phone: "+91 94432 11223" },
+              vehicle: { vehicleName: "TVS Jupiter 125 Disc", rcNo: "TN 23 CF 8104", engineNo: "TVSJ125E4402", chassisNo: "MD626AJ19PC0492", modelYear: "2024" },
+              loanAmount: 85e3,
+              interestRate: 15,
+              durationMonths: 24,
+              emiAmount: 4124,
+              totalDueAmount: 98976,
+              totalPaidAmount: 4124,
+              pendingAmount: 94852,
+              disbursementDate: "2025-02-15",
+              status: "ACTIVE",
+              installments: buildInstallments(24, 4124, 2025, 3, 1, 8802)
+            },
+            {
+              loanNo: "LN-2024-003",
+              borrowerId: "CUST-1003",
+              customer: { id: "CUST-1003", name: "S. Arumugam", phone: "+91 97890 33445" },
+              vehicle: { vehicleName: "Bajaj Pulsar 150 Neon", rcNo: "TN 73 H 2948", engineNo: "DHGBNA33091", chassisNo: "MD2A11CY7NP8402", modelYear: "2022" },
+              loanAmount: 7e4,
+              interestRate: 18,
+              durationMonths: 12,
+              emiAmount: 6417,
+              totalDueAmount: 77004,
+              totalPaidAmount: 77004,
+              pendingAmount: 0,
+              disbursementDate: "2024-03-01",
+              status: "CLOSED",
+              installments: buildInstallments(12, 6417, 2024, 4, 12, 8700)
+            }
+          ]);
+          await import_database9.ReceiptModel.create([
+            {
+              receiptNo: "RCP-8801",
+              loanNo: "LN-2025-001",
+              customerName: "M. Ramesh Kumar",
+              amount: 4104,
+              paymentMode: "UPI",
+              referenceNo: "UPI/390129482/YES",
+              date: "2025-02-10",
+              collectorName: "Anitha R"
+            },
+            {
+              receiptNo: "RCP-8802",
+              loanNo: "LN-2025-001",
+              customerName: "M. Ramesh Kumar",
+              amount: 4104,
+              paymentMode: "CASH",
+              date: "2025-03-10",
+              collectorName: "Rajesh Kannan"
+            },
+            {
+              receiptNo: "RCP-8803",
+              loanNo: "LN-2025-002",
+              customerName: "K. Priya Dharshini",
+              amount: 4124,
+              paymentMode: "BANK",
+              referenceNo: "NEFT-HDFC-9938102",
+              date: "2025-03-15",
+              collectorName: "Anitha R"
+            }
+          ]);
+          await import_database9.PreLoanModel.create([
+            {
+              id: "PL-101",
+              applicantName: "V. Saravanan",
+              phone: "+91 94881 22334",
+              address: "9 Railway Station Road, Katpadi",
+              vehicleModel: "Royal Enfield Hunter 350",
+              vehicleModelYear: "2024",
+              vehicleValue: 185e3,
+              requestedAmount: 12e4,
+              status: "PENDING",
+              aiRiskScore: 18,
+              aiFraudFlag: false,
+              date: "2025-03-18"
+            },
+            {
+              id: "PL-102",
+              applicantName: "D. Manikandan",
+              phone: "+91 98401 77665",
+              address: "24 Old Bye-Pass Road, Vellore",
+              vehicleModel: "Hero Splendor Plus XTEC",
+              vehicleModelYear: "2023",
+              vehicleValue: 82e3,
+              requestedAmount: 6e4,
+              status: "APPROVED",
+              aiRiskScore: 12,
+              aiFraudFlag: false,
+              date: "2025-03-19"
+            }
+          ]);
+          await import_database9.ConsultancyModel.create([
+            {
+              id: "CON-501",
+              type: "PURCHASE",
+              vehicleName: "Hyundai i20 Magna 1.2 Petrol",
+              vehicleNo: "TN 23 AP 5510",
+              makeYear: 2021,
+              purchasePrice: 42e4,
+              marketValuation: 48e4,
+              sellerName: "R. Balaji",
+              phone: "+91 98432 55443",
+              status: "IN_STOCK",
+              callHistory: [],
+              rcBookHistory: [],
+              date: "2025-03-01"
+            },
+            {
+              id: "CON-502",
+              type: "SALE",
+              vehicleName: "Maruti Suzuki Swift VXi",
+              vehicleNo: "TN 23 BM 1882",
+              makeYear: 2020,
+              purchasePrice: 38e4,
+              soldPrice: 435e3,
+              commissionEarned: 15e3,
+              sellerName: "K. Elango",
+              buyerName: "T. Chandran",
+              buyerPhone: "+91 98421 99112",
+              status: "SOLD",
+              callHistory: [],
+              rcBookHistory: [],
+              date: "2025-02-14"
+            }
+          ]);
+          await import_database9.SeizedVehicleModel.create({
+            id: "SZ-701",
+            loanNo: "LN-2024-089",
+            customerName: "P. Chandrasekar",
+            vehicleName: "Yamaha FZ-S V3 (Matt Blue)",
+            rcNo: "TN 23 CJ 7721",
+            seizureDate: "2025-02-28",
+            godownLocation: "Katpadi Central Godown - Bay 4",
+            valuationAmount: 58e3,
+            loanBalance: 64200,
+            status: "IN_YARD"
+          });
+          await import_database9.DepositModel.create([
+            {
+              id: "DEP-901",
+              depositorName: "Dr. N. Sundararajan",
+              amount: 5e5,
+              interestRatePct: 11.5,
+              termMonths: 12,
+              startDate: "2024-06-01",
+              maturityDate: "2025-06-01",
+              maturityAmount: 557500,
+              status: "ACTIVE"
+            },
+            {
+              id: "DEP-902",
+              depositorName: "Mrs. Revathi Ramanathan",
+              amount: 25e4,
+              interestRatePct: 12,
+              termMonths: 24,
+              startDate: "2024-09-15",
+              maturityDate: "2026-09-15",
+              maturityAmount: 31e4,
+              status: "ACTIVE"
+            }
+          ]);
+          await import_database9.HandLoanModel.create({
+            id: "HL-301",
+            borrowerName: "V. Thangavel",
+            phone: "+91 98421 33221",
+            amount: 25e3,
+            interestRatePerMonth: 2,
+            givenDate: "2025-03-01",
+            promisedReturnDate: "2025-04-01",
+            status: "ACTIVE"
+          });
           await import_database9.AuditLogModel.create({
             id: "LOG-" + Date.now(),
             timestamp: (/* @__PURE__ */ new Date()).toISOString(),
             user: "SYSTEM_BOOT",
             action: "DATABASE_INITIALIZED",
-            details: "Auto-initialized database with default staff, dealers, and corporate parameters."
+            details: "Auto-initialized database with default staff, dealers, loans, and corporate parameters."
           });
           console.log("[Backend] Auto-seed completed successfully!");
         }
@@ -76127,6 +76486,10 @@ app.use("/consultancies", consultancyRoutes_default);
 app.use("/ai", aiRoutes_default);
 app.use("/", masterRoutes_default);
 app.use("/", financeRoutes_default);
+var frontendDist = import_node_fs2.default.existsSync(import_node_path2.default.resolve(process.cwd(), "dist")) ? import_node_path2.default.resolve(process.cwd(), "dist") : import_node_path2.default.resolve(process.cwd(), "frontend/dist");
+if (import_node_fs2.default.existsSync(frontendDist)) {
+  app.use(import_express9.default.static(frontendDist));
+}
 app.get("/", (req, res) => {
   if (req.accepts("html")) {
     res.setHeader("Content-Type", "text/html");
@@ -76357,11 +76720,9 @@ app.get("/health", (req, res) => {
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", timestamp: (/* @__PURE__ */ new Date()).toISOString(), service: "XEROVA Auto Finance API Server" });
 });
-var frontendDist = import_node_path2.default.resolve(process.cwd(), "frontend/dist");
 if (import_node_fs2.default.existsSync(frontendDist)) {
-  app.use(import_express9.default.static(frontendDist));
   app.use((req, res, next) => {
-    if (req.method !== "GET" || req.url.startsWith("/api") || req.url === "/health") {
+    if (req.method !== "GET" || req.url.startsWith("/api") || req.url.startsWith("/health")) {
       return next();
     }
     const indexPath = import_node_path2.default.join(frontendDist, "index.html");
@@ -76379,7 +76740,7 @@ app.use((err, req, res, next) => {
 });
 var app_default = app;
 
-// api/serverless.ts
+// scripts/serverless.ts
 var initPromise = null;
 async function ensureDB() {
   if (!initPromise) {
@@ -76392,17 +76753,21 @@ async function ensureDB() {
 }
 async function handler(req, res) {
   await ensureDB();
-  console.log(`[Vercel Serverless] ${req.method} ${req.url}`);
-  if (req.url === "/api/index.js" || req.url === "/api/index" || req.url?.includes("[...path]")) {
+  const originalUrl = req.url || "";
+  console.log(`[Vercel Serverless] Incoming: ${req.method} ${originalUrl}`);
+  if (originalUrl.startsWith("/api/index.js") || originalUrl.startsWith("/api/index") || originalUrl === "/api" || originalUrl.includes("[...path]")) {
     if (req.query && req.query.path) {
       const p = Array.isArray(req.query.path) ? req.query.path.join("/") : req.query.path;
       req.url = "/api/" + p.replace(/^\//, "");
+    } else if (req.headers && req.headers["x-matched-path"]) {
+      req.url = req.headers["x-matched-path"];
     } else if (req.headers && req.headers["x-original-url"]) {
       req.url = req.headers["x-original-url"];
     } else if (req.headers && req.headers["x-forwarded-uri"]) {
       req.url = req.headers["x-forwarded-uri"];
     }
   }
+  console.log(`[Vercel Serverless] Delegating to Express: ${req.method} ${req.url}`);
   return app_default(req, res);
 }
 /*! Bundled license information:

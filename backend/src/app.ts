@@ -3,7 +3,21 @@ import cors from "cors";
 import dotenv from "dotenv";
 import path from "node:path";
 import fs from "node:fs";
-import { connectDB, UserModel, MasterModel, SettingModel, AuditLogModel } from "@xerova/database";
+import { 
+  connectDB, 
+  UserModel, 
+  MasterModel, 
+  SettingModel, 
+  AuditLogModel,
+  CustomerModel,
+  LoanModel,
+  ReceiptModel,
+  PreLoanModel,
+  ConsultancyModel,
+  SeizedVehicleModel,
+  DepositModel,
+  HandLoanModel
+} from "@xerova/database";
 
 // Routes
 import authRoutes from "./routes/authRoutes.js";
@@ -92,12 +106,298 @@ export async function initDB(): Promise<void> {
             { key: "overduePenaltyPerDay", value: 100 },
             { key: "gracePeriodDays", value: 5 }
           ]);
+
+          // Seed Customers
+          await CustomerModel.create([
+            {
+              id: "CUST-1001",
+              name: "M. Ramesh Kumar",
+              phone: "+91 98421 55667",
+              address: "No. 14, Gandhi Road, Sathuvachari",
+              city: "Vellore",
+              state: "Tamil Nadu",
+              pincode: "632009",
+              panNo: "ABCDE1234F",
+              aadhaarNo: "4567 8901 2345",
+              occupation: "Transport Business",
+              monthlyIncome: 45000,
+              guarantors: [{ name: "P. Murugan", phone: "+91 98421 88990", address: "Gandhi Road, Vellore" }]
+            },
+            {
+              id: "CUST-1002",
+              name: "K. Priya Dharshini",
+              phone: "+91 94432 11223",
+              address: "Plot 8A, Phase 2, TNHB",
+              city: "Katpadi",
+              state: "Tamil Nadu",
+              pincode: "632014",
+              panNo: "FGHIJ5678K",
+              aadhaarNo: "7890 1234 5678",
+              occupation: "Software Professional",
+              monthlyIncome: 68000,
+              guarantors: [{ name: "K. Karthikeyan", phone: "+91 94432 99001", address: "TNHB Katpadi" }]
+            },
+            {
+              id: "CUST-1003",
+              name: "S. Arumugam",
+              phone: "+91 97890 33445",
+              address: "12/4 Bazaar Street",
+              city: "Ranipet",
+              state: "Tamil Nadu",
+              pincode: "632401",
+              panNo: "KLMNO9012P",
+              aadhaarNo: "2345 6789 0123",
+              occupation: "Dairy Farming & Milk Supply",
+              monthlyIncome: 35000
+            },
+            {
+              id: "CUST-1004",
+              name: "G. Venkatesh",
+              phone: "+91 98944 66778",
+              address: "45 Anna Salai",
+              city: "Vellore",
+              state: "Tamil Nadu",
+              pincode: "632001",
+              panNo: "QRSTU3456V",
+              aadhaarNo: "9012 3456 7890",
+              occupation: "Retail Merchant",
+              monthlyIncome: 52000
+            }
+          ]);
+
+          // Helper for realistic installments
+          const buildInstallments = (count: number, emi: number, startYear: number, startMonth: number, paidCount: number, rcpPrefix: number) => {
+            const list = [];
+            for (let i = 1; i <= count; i++) {
+              const d = new Date(startYear, startMonth - 1 + (i - 1), 10);
+              const dueDate = d.toISOString().split("T")[0];
+              const isPaid = i <= paidCount;
+              list.push({
+                instNo: i,
+                dueDate,
+                emiAmount: emi,
+                principalPart: Math.round(emi * 0.75),
+                interestPart: Math.round(emi * 0.25),
+                status: isPaid ? ("PAID" as const) : ("PENDING" as const),
+                paidAmount: isPaid ? emi : 0,
+                paidDate: isPaid ? dueDate : undefined,
+                receiptNo: isPaid ? `RCP-${rcpPrefix + i}` : undefined
+              });
+            }
+            return list;
+          };
+
+          // Seed Loans
+          await LoanModel.create([
+            {
+              loanNo: "LN-2025-001",
+              borrowerId: "CUST-1001",
+              customer: { id: "CUST-1001", name: "M. Ramesh Kumar", phone: "+91 98421 55667" },
+              vehicle: { vehicleName: "Honda Activa 6G 110cc", rcNo: "TN 23 BK 4092", engineNo: "JF91E881290", chassisNo: "ME4JF913LK10239", modelYear: "2023" },
+              loanAmount: 65000,
+              interestRate: 16.5,
+              durationMonths: 18,
+              emiAmount: 4104,
+              totalDueAmount: 73872,
+              totalPaidAmount: 8208,
+              pendingAmount: 65664,
+              disbursementDate: "2025-01-10",
+              status: "ACTIVE",
+              installments: buildInstallments(18, 4104, 2025, 2, 2, 8800)
+            },
+            {
+              loanNo: "LN-2025-002",
+              borrowerId: "CUST-1002",
+              customer: { id: "CUST-1002", name: "K. Priya Dharshini", phone: "+91 94432 11223" },
+              vehicle: { vehicleName: "TVS Jupiter 125 Disc", rcNo: "TN 23 CF 8104", engineNo: "TVSJ125E4402", chassisNo: "MD626AJ19PC0492", modelYear: "2024" },
+              loanAmount: 85000,
+              interestRate: 15.0,
+              durationMonths: 24,
+              emiAmount: 4124,
+              totalDueAmount: 98976,
+              totalPaidAmount: 4124,
+              pendingAmount: 94852,
+              disbursementDate: "2025-02-15",
+              status: "ACTIVE",
+              installments: buildInstallments(24, 4124, 2025, 3, 1, 8802)
+            },
+            {
+              loanNo: "LN-2024-003",
+              borrowerId: "CUST-1003",
+              customer: { id: "CUST-1003", name: "S. Arumugam", phone: "+91 97890 33445" },
+              vehicle: { vehicleName: "Bajaj Pulsar 150 Neon", rcNo: "TN 73 H 2948", engineNo: "DHGBNA33091", chassisNo: "MD2A11CY7NP8402", modelYear: "2022" },
+              loanAmount: 70000,
+              interestRate: 18.0,
+              durationMonths: 12,
+              emiAmount: 6417,
+              totalDueAmount: 77004,
+              totalPaidAmount: 77004,
+              pendingAmount: 0,
+              disbursementDate: "2024-03-01",
+              status: "CLOSED",
+              installments: buildInstallments(12, 6417, 2024, 4, 12, 8700)
+            }
+          ]);
+
+          // Seed Receipts
+          await ReceiptModel.create([
+            {
+              receiptNo: "RCP-8801",
+              loanNo: "LN-2025-001",
+              customerName: "M. Ramesh Kumar",
+              amount: 4104,
+              paymentMode: "UPI",
+              referenceNo: "UPI/390129482/YES",
+              date: "2025-02-10",
+              collectorName: "Anitha R"
+            },
+            {
+              receiptNo: "RCP-8802",
+              loanNo: "LN-2025-001",
+              customerName: "M. Ramesh Kumar",
+              amount: 4104,
+              paymentMode: "CASH",
+              date: "2025-03-10",
+              collectorName: "Rajesh Kannan"
+            },
+            {
+              receiptNo: "RCP-8803",
+              loanNo: "LN-2025-002",
+              customerName: "K. Priya Dharshini",
+              amount: 4124,
+              paymentMode: "BANK",
+              referenceNo: "NEFT-HDFC-9938102",
+              date: "2025-03-15",
+              collectorName: "Anitha R"
+            }
+          ]);
+
+          // Seed PreLoans
+          await PreLoanModel.create([
+            {
+              id: "PL-101",
+              applicantName: "V. Saravanan",
+              phone: "+91 94881 22334",
+              address: "9 Railway Station Road, Katpadi",
+              vehicleModel: "Royal Enfield Hunter 350",
+              vehicleModelYear: "2024",
+              vehicleValue: 185000,
+              requestedAmount: 120000,
+              status: "PENDING",
+              aiRiskScore: 18,
+              aiFraudFlag: false,
+              date: "2025-03-18"
+            },
+            {
+              id: "PL-102",
+              applicantName: "D. Manikandan",
+              phone: "+91 98401 77665",
+              address: "24 Old Bye-Pass Road, Vellore",
+              vehicleModel: "Hero Splendor Plus XTEC",
+              vehicleModelYear: "2023",
+              vehicleValue: 82000,
+              requestedAmount: 60000,
+              status: "APPROVED",
+              aiRiskScore: 12,
+              aiFraudFlag: false,
+              date: "2025-03-19"
+            }
+          ]);
+
+          // Seed Consultancy
+          await ConsultancyModel.create([
+            {
+              id: "CON-501",
+              type: "PURCHASE",
+              vehicleName: "Hyundai i20 Magna 1.2 Petrol",
+              vehicleNo: "TN 23 AP 5510",
+              makeYear: 2021,
+              purchasePrice: 420000,
+              marketValuation: 480000,
+              sellerName: "R. Balaji",
+              phone: "+91 98432 55443",
+              status: "IN_STOCK",
+              callHistory: [],
+              rcBookHistory: [],
+              date: "2025-03-01"
+            },
+            {
+              id: "CON-502",
+              type: "SALE",
+              vehicleName: "Maruti Suzuki Swift VXi",
+              vehicleNo: "TN 23 BM 1882",
+              makeYear: 2020,
+              purchasePrice: 380000,
+              soldPrice: 435000,
+              commissionEarned: 15000,
+              sellerName: "K. Elango",
+              buyerName: "T. Chandran",
+              buyerPhone: "+91 98421 99112",
+              status: "SOLD",
+              callHistory: [],
+              rcBookHistory: [],
+              date: "2025-02-14"
+            }
+          ]);
+
+          // Seed Seized Vehicle
+          await SeizedVehicleModel.create({
+            id: "SZ-701",
+            loanNo: "LN-2024-089",
+            customerName: "P. Chandrasekar",
+            vehicleName: "Yamaha FZ-S V3 (Matt Blue)",
+            rcNo: "TN 23 CJ 7721",
+            seizureDate: "2025-02-28",
+            godownLocation: "Katpadi Central Godown - Bay 4",
+            valuationAmount: 58000,
+            loanBalance: 64200,
+            status: "IN_YARD"
+          });
+
+          // Seed Deposits
+          await DepositModel.create([
+            {
+              id: "DEP-901",
+              depositorName: "Dr. N. Sundararajan",
+              amount: 500000,
+              interestRatePct: 11.5,
+              termMonths: 12,
+              startDate: "2024-06-01",
+              maturityDate: "2025-06-01",
+              maturityAmount: 557500,
+              status: "ACTIVE"
+            },
+            {
+              id: "DEP-902",
+              depositorName: "Mrs. Revathi Ramanathan",
+              amount: 250000,
+              interestRatePct: 12.0,
+              termMonths: 24,
+              startDate: "2024-09-15",
+              maturityDate: "2026-09-15",
+              maturityAmount: 310000,
+              status: "ACTIVE"
+            }
+          ]);
+
+          // Seed HandLoan
+          await HandLoanModel.create({
+            id: "HL-301",
+            borrowerName: "V. Thangavel",
+            phone: "+91 98421 33221",
+            amount: 25000,
+            interestRatePerMonth: 2.0,
+            givenDate: "2025-03-01",
+            promisedReturnDate: "2025-04-01",
+            status: "ACTIVE"
+          });
+
           await AuditLogModel.create({
             id: "LOG-" + Date.now(),
             timestamp: new Date().toISOString(),
             user: "SYSTEM_BOOT",
             action: "DATABASE_INITIALIZED",
-            details: "Auto-initialized database with default staff, dealers, and corporate parameters."
+            details: "Auto-initialized database with default staff, dealers, loans, and corporate parameters."
           });
           console.log("[Backend] Auto-seed completed successfully!");
         }
@@ -137,6 +437,15 @@ app.use("/consultancies", consultancyRoutes);
 app.use("/ai", aiRoutes);
 app.use("/", masterRoutes);
 app.use("/", financeRoutes);
+
+// Serve frontend static assets in unified production mode if available
+const frontendDist = fs.existsSync(path.resolve(process.cwd(), "dist"))
+  ? path.resolve(process.cwd(), "dist")
+  : path.resolve(process.cwd(), "frontend/dist");
+
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+}
 
 // Root & Health check endpoints
 app.get("/", (req, res) => {
@@ -374,12 +683,10 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "OK", timestamp: new Date().toISOString(), service: "XEROVA Auto Finance API Server" });
 });
 
-// Serve frontend static assets in unified production mode if available
-const frontendDist = path.resolve(process.cwd(), "frontend/dist");
+// SPA fallback for non-API routes
 if (fs.existsSync(frontendDist)) {
-  app.use(express.static(frontendDist));
   app.use((req, res, next) => {
-    if (req.method !== "GET" || req.url.startsWith("/api") || req.url === "/health") {
+    if (req.method !== "GET" || req.url.startsWith("/api") || req.url.startsWith("/health")) {
       return next();
     }
     const indexPath = path.join(frontendDist, "index.html");

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { LoanModel, CustomerModel, AuditLogModel } from "@xerova/database";
+import { LoanModel, CustomerModel, AuditLogModel, HandLoanModel } from "@xerova/database";
 
 const router = Router();
 
@@ -7,11 +7,18 @@ export function generateInstallments(loanAmount: number, rate: number, duration:
   const insts = [];
   let currentBalance = loanAmount;
   const monthlyRate = rate / 12 / 100;
-  const dateObj = new Date(startDate || Date.now());
+  const baseDate = new Date(startDate || Date.now());
+  const startYear = baseDate.getFullYear();
+  const startMonth = baseDate.getMonth();
+  const startDay = baseDate.getDate();
 
   for (let i = 1; i <= duration; i++) {
-    dateObj.setMonth(dateObj.getMonth() + 1);
-    const dueDate = dateObj.toISOString().split("T")[0];
+    const targetDate = new Date(startYear, startMonth + i, startDay);
+    const expectedMonth = (startMonth + i) % 12;
+    if (targetDate.getMonth() !== (expectedMonth < 0 ? expectedMonth + 12 : expectedMonth)) {
+      targetDate.setDate(0); // clamp to end of intended month
+    }
+    const dueDate = targetDate.toISOString().split("T")[0];
     const interestPart = Math.round(currentBalance * monthlyRate);
     let principalPart = emi - interestPart;
     if (i === duration) {
@@ -48,8 +55,21 @@ router.post("/", async (req, res) => {
     let customer = body.customer;
     if (body.borrowerId && !customer) {
       customer = await CustomerModel.findOne({ id: body.borrowerId });
+    } else if (customer) {
+      const phone = customer.phone || customer.mobile;
+      let existingCustomer = phone ? await CustomerModel.findOne({ phone }) : null;
+      if (!existingCustomer) {
+        const custId = customer.id || `CUST-${Date.now().toString().slice(-4)}`;
+        customer.id = custId;
+        existingCustomer = await CustomerModel.create({
+          ...customer,
+          id: custId
+        });
+      }
+      customer = existingCustomer;
     }
 
+    const borrowerId = customer?.id || body.borrowerId || `CUST-${Date.now().toString().slice(-4)}`;
     const loanAmount = Number(body.loanAmount) || 0;
     const interestRate = Number(body.interestRate) || 16.5;
     const durationMonths = Number(body.durationMonths) || 24;
@@ -61,7 +81,7 @@ router.post("/", async (req, res) => {
     const newLoan = await LoanModel.create({
       ...body,
       loanNo: body.loanNo || `HP-${Date.now().toString().slice(-4)}`,
-      borrowerId: body.borrowerId || customer?.id || "CUST-DEFAULT",
+      borrowerId,
       customer,
       loanAmount,
       interestRate,
@@ -75,6 +95,22 @@ router.post("/", async (req, res) => {
       installments,
       payments: []
     });
+
+    if (body.handloanAmount && Number(body.handloanAmount) > 0) {
+      await HandLoanModel.create({
+        id: `HL-${Date.now().toString().slice(-5)}`,
+        loanNo: newLoan.loanNo,
+        customerName: customer?.name || "Borrower",
+        borrowerName: customer?.name || "Borrower",
+        phone: customer?.phone || "N/A",
+        amount: Number(body.handloanAmount),
+        givenDate: body.disbursementDate || new Date().toISOString().split("T")[0],
+        status: "ACTIVE",
+        repaidAmount: 0,
+        remarks: body.handloanRemarks || `Auxiliary advance linked to HP loan ${newLoan.loanNo}`,
+        payments: []
+      });
+    }
 
     await AuditLogModel.create({
       id: "LOG-" + Date.now(),

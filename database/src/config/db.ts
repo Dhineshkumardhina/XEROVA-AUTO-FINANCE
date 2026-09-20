@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import { PGlite } from "@electric-sql/pglite";
 import dotenv from "dotenv";
+import path from "node:path";
 
 dotenv.config();
 
@@ -83,8 +84,9 @@ export async function connectDB(): Promise<void> {
 
   // Local/Offline Fallback: Embedded PGlite engine
   try {
-    console.log(`[PostgreSQL] Initializing embedded local PostgreSQL (PGlite)...`);
-    pgliteInstance = new PGlite();
+    const pglitePath = process.env.VERCEL ? undefined : (process.env.PGLITE_DATA_DIR || path.resolve(process.cwd(), ".pgdata"));
+    console.log(`[PostgreSQL] Initializing embedded local PostgreSQL (PGlite${pglitePath ? ` at ${pglitePath}` : " in-memory"})...`);
+    pgliteInstance = pglitePath ? new PGlite(pglitePath) : new PGlite();
     await pgliteInstance.waitReady;
     console.log(`[PostgreSQL] Embedded PGlite engine ready.`);
     isConnected = true;

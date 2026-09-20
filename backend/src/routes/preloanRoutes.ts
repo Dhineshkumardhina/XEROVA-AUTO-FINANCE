@@ -147,10 +147,21 @@ router.post("/:id/status", async (req, res) => {
 router.post("/:id/fraud-flag", async (req, res) => {
   try {
     const { id } = req.params;
-    const { aiFraudFlag, aiFraudReasons } = req.body;
+    const fraudFlagged = req.body.fraudFlagged !== undefined 
+      ? Boolean(req.body.fraudFlagged) 
+      : (req.body.aiFraudFlag !== undefined ? Boolean(req.body.aiFraudFlag) : true);
+    const aiFraudReasons = req.body.aiFraudReasons || req.body.reasons || [];
+    const updateData: any = {
+      fraudFlagged,
+      aiFraudFlag: fraudFlagged,
+      aiFraudReasons
+    };
+    if (req.body.riskScore !== undefined) updateData.riskScore = req.body.riskScore;
+    if (req.body.aiReportText) updateData.aiReportText = req.body.aiReportText;
+
     const updated = await PreLoanModel.findOneAndUpdate(
       { $or: [{ id }, { serialNo: id }] },
-      { $set: { aiFraudFlag, aiFraudReasons } },
+      { $set: updateData },
       { new: true }
     );
     if (!updated) return res.status(404).json({ error: "Proposal not found" });

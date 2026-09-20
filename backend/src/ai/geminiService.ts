@@ -20,41 +20,61 @@ export function getGeminiClient(): GoogleGenAI | null {
   }
 }
 
+function parseJsonSafely(text: string): any {
+  if (!text) return null;
+  const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
 export async function generateRiskScore(loanData: any): Promise<any> {
+  const income = loanData.monthlyIncome || loanData.income || 25000;
+  const emi = loanData.emiAmount || 3000;
+  const ratio = emi / income;
+  let score = 750;
+  let riskLevel = "LOW";
+  let recommendation = "Approve automatically with standard interest rate.";
+  if (ratio > 0.4) {
+    score = 620;
+    riskLevel = "MEDIUM";
+    recommendation = "Require one additional co-obligant or guarantor.";
+  }
+  if (ratio > 0.6 || income < 15000) {
+    score = 510;
+    riskLevel = "HIGH";
+    recommendation = "High DTI ratio. Consider reducing loan amount or rejecting.";
+  }
+
+  const fallback = {
+    score,
+    riskLevel,
+    defaultProbability: ratio > 0.5 ? "28%" : "8%",
+    recommendation,
+    keyFactors: [
+      `Monthly Income: ₹${Number(income).toLocaleString()}`,
+      `Proposed EMI: ₹${Number(emi).toLocaleString()} (DTI: ${Math.round(ratio * 100)}%)`,
+      `Occupation Stability: ${loanData.occupation || "Employed"}`
+    ]
+  };
+
   const ai = getGeminiClient();
   if (!ai) {
-    // Heuristic fallback
-    const income = loanData.monthlyIncome || 25000;
-    const emi = loanData.emiAmount || 3000;
-    const ratio = emi / income;
-    let score = 750;
-    let riskLevel = "LOW";
-    let recommendation = "Approve automatically with standard interest rate.";
-    if (ratio > 0.4) {
-      score = 620;
-      riskLevel = "MEDIUM";
-      recommendation = "Require one additional co-obligant or guarantor.";
-    }
-    if (ratio > 0.6 || income < 15000) {
-      score = 510;
-      riskLevel = "HIGH";
-      recommendation = "High DTI ratio. Consider reducing loan amount or rejecting.";
-    }
-    return {
-      score,
-      riskLevel,
-      defaultProbability: ratio > 0.5 ? "28%" : "8%",
-      recommendation,
-      keyFactors: [
-        `Monthly Income: ₹${income.toLocaleString()}`,
-        `Proposed EMI: ₹${emi.toLocaleString()} (DTI: Math.round(ratio*100)%)`,
-        `Occupation Stability: ${loanData.occupation || "Employed"}`
-      ]
-    };
+    return fallback;
   }
 
   try {
-    const prompt = `You are an AI Underwriter for XEROVA Auto Finance. Evaluate this vehicle loan application and respond ONLY with valid JSON (no markdown fences):
+    const prompt = `You are an AI Underwriter for XEROVA Auto Finance. Evaluate this vehicle loan application and respond ONLY with valid JSON:
     ${JSON.stringify(loanData)}
     Return JSON format:
     {"score": 750, "riskLevel": "LOW", "defaultProbability": "5%", "recommendation": "...", "keyFactors": ["..."]}`;
@@ -63,67 +83,77 @@ export async function generateRiskScore(loanData: any): Promise<any> {
       model: "gemini-2.0-flash",
       contents: prompt
     });
-    const text = response.text || "{}";
-    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(cleaned);
+    const parsed = parseJsonSafely(response.text || "");
+    return parsed || fallback;
   } catch (e) {
     console.error("[AI] Error generating risk score:", e);
-    return {
-      score: 680,
-      riskLevel: "MEDIUM",
-      defaultProbability: "15%",
-      recommendation: "AI analysis timed out. Evaluated with standard manual criteria.",
-      keyFactors: ["Standard verification required."]
-    };
+    return fallback;
   }
 }
 
 export async function checkFraud(applicantData: any): Promise<any> {
+  const data = applicantData?.proposal || applicantData || {};
+  const pan = data.panNo || data.applicantPan || data.govtId || "";
+  const phone = data.phone || data.housePhone || "";
+  let flag = false;
+  const reasons: string[] = [];
+  if (!pan || pan.length !== 10) {
+    flag = true;
+    reasons.push("Invalid or missing PAN number format.");
+  }
+  if (!phone || phone.length < 10) {
+    flag = true;
+    reasons.push("Suspicious or incomplete contact phone number.");
+  }
+
+  const fallback = {
+    flagged: flag,
+    isFlagged: flag,
+    confidence: flag ? "85%" : "95%",
+    riskScore: flag ? 75 : 12,
+    fraudRiskScore: flag ? 75 : 12,
+    reasons: flag ? reasons : ["No fraud anomalies detected in applicant KYC."],
+    riskFactors: flag ? reasons : [],
+    verificationAction: flag ? "Mandatory physical field verification by Recovery Officer." : "Standard digital verification sufficient.",
+    auditRecommendation: flag ? "Hold application: suspicious identity attributes detected. Field verification required before disbursement." : "Application verified. Low fraud probability detected in KYC records."
+  };
+
   const ai = getGeminiClient();
   if (!ai) {
-    // Heuristic fallback
-    const pan = applicantData.panNo || "";
-    const phone = applicantData.phone || "";
-    let flag = false;
-    const reasons: string[] = [];
-    if (!pan || pan.length !== 10) {
-      flag = true;
-      reasons.push("Invalid or missing PAN number format.");
-    }
-    if (!phone || phone.length < 10) {
-      flag = true;
-      reasons.push("Suspicious contact phone number.");
-    }
-    return {
-      flagged: flag,
-      confidence: flag ? "85%" : "95%",
-      riskScore: flag ? 75 : 12,
-      reasons: flag ? reasons : ["No fraud anomalies detected in applicant KYC."],
-      verificationAction: flag ? "Mandatory physical field verification by Recovery Officer." : "Standard digital verification sufficient."
-    };
+    return fallback;
   }
 
   try {
     const prompt = `Analyze this auto finance applicant for fraud indicators. Return ONLY valid JSON:
-    ${JSON.stringify(applicantData)}
+    ${JSON.stringify(data)}
     Format: {"flagged": false, "confidence": "95%", "riskScore": 15, "reasons": ["..."], "verificationAction": "..."}`;
     
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
       contents: prompt
     });
-    const text = response.text || "{}";
-    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(cleaned);
+    const parsed = parseJsonSafely(response.text || "");
+    if (parsed) {
+      const isFlagged = Boolean(parsed.flagged ?? parsed.isFlagged ?? flag);
+      const score = Number(parsed.riskScore ?? parsed.fraudRiskScore ?? (isFlagged ? 75 : 15));
+      const resReasons = parsed.reasons || parsed.riskFactors || reasons;
+      const act = parsed.verificationAction || parsed.auditRecommendation || (isFlagged ? "Mandatory physical field verification." : "Standard digital verification.");
+      return {
+        flagged: isFlagged,
+        isFlagged,
+        confidence: parsed.confidence || "95%",
+        riskScore: score,
+        fraudRiskScore: score,
+        reasons: resReasons,
+        riskFactors: resReasons,
+        verificationAction: act,
+        auditRecommendation: act
+      };
+    }
+    return fallback;
   } catch (e) {
     console.error("[AI] Error checking fraud:", e);
-    return {
-      flagged: false,
-      confidence: "80%",
-      riskScore: 20,
-      reasons: ["AI service offline. KYC format validated by fallback."],
-      verificationAction: "Standard field check."
-    };
+    return fallback;
   }
 }
 
@@ -171,19 +201,19 @@ export async function runFinanceAudit(data: { loansCount: number; activePrincipa
       model: "gemini-2.0-flash",
       contents: prompt
     });
-    const text = response.text || "{}";
-    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    const parsed = JSON.parse(cleaned);
-
-    return {
-      ...baseResult,
-      ...parsed,
-      overallHealth: parsed.auditorVerdict || baseResult.overallHealth,
-      auditScore: parsed.integrityScore || baseResult.auditScore,
-      summary: parsed.auditorCertifiedOpinion || baseResult.summary,
-      anomaliesDetected: parsed.anomaliesFound || baseResult.anomaliesDetected,
-      actionItems: parsed.keyRecommendations || baseResult.actionItems
-    };
+    const parsed = parseJsonSafely(response.text || "");
+    if (parsed) {
+      return {
+        ...baseResult,
+        ...parsed,
+        overallHealth: parsed.auditorVerdict || baseResult.overallHealth,
+        auditScore: parsed.integrityScore || baseResult.auditScore,
+        summary: parsed.auditorCertifiedOpinion || baseResult.summary,
+        anomaliesDetected: parsed.anomaliesFound || baseResult.anomaliesDetected,
+        actionItems: parsed.keyRecommendations || baseResult.actionItems
+      };
+    }
+    return baseResult;
   } catch (e) {
     console.error("[AI] Error running audit:", e);
     return baseResult;
